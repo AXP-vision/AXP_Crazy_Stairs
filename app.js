@@ -1,4 +1,4 @@
-// app.js - AXP Final Commercial Edition: Premium Character Visuals
+// app.js - AXP Final Commercial Edition: Premium Illustrated Character Visuals
 
 // ==========================================
 // 🛡️ AXP 商業防護：網域鎖定 (防盜連)
@@ -39,7 +39,7 @@ window.addEventListener('resize', resizeCanvas);
 resizeCanvas(); 
 
 // ==========================================
-// ⚙️ 核心系統與排行榜
+// ⚙️ Core Core System & 排行榜
 // ==========================================
 const STATE = { START: 0, PLAYING: 1, PAUSED: 2, GAMEOVER: 3, LEADERBOARD: 4 };
 let gameState = STATE.START;
@@ -60,11 +60,20 @@ function saveToLeaderboard(name, floors) {
     catch (e) { console.warn("無法儲存排行榜資料"); }
 }
 
-const MODES = { P1_MALE: 1, P1_FEMALE: 2, P2_MALE_FEMALE: 3, P2_MALE_MALE: 4, P2_FEMALE_FEMALE: 5, P2_FEMALE_MALE: 6 };
+const MODES = {
+    P1_MALE: 1, P1_FEMALE: 2, 
+    P2_MALE_FEMALE: 3, P2_MALE_MALE: 4, P2_FEMALE_FEMALE: 5, P2_FEMALE_MALE: 6
+};
 let selectedSetup = MODES.P1_MALE; 
 let gameMode = 1; 
 
-const CONFIG = { START_SPEED: 1.5, MAX_SPEED: 4.0, SPEED_STEP: 0.2, GAP_DISTANCE: 165 };
+const CONFIG = {
+    START_SPEED: 1.5,      
+    MAX_SPEED: 4.0,        
+    SPEED_STEP: 0.2,      
+    GAP_DISTANCE: 165      
+};
+
 let currentPlatformSpeed = CONFIG.START_SPEED;
 
 const GRAVITY = 0.4;
@@ -73,17 +82,22 @@ const MAX_MOVE_SPEED = 5.0;
 const MOVE_ACCEL = 1.0; 
 const FRICTION = 0.85;
 
-let floorCount = 1; let platforms = []; let keys = {}; let bgOffsetY = 0;
+let floorCount = 1;
+let platforms = [];
+let keys = {};
+let bgOffsetY = 0;
+let speedPairPending = false; 
 
 const CHAR_TYPES = { MALE_1: 0, MALE_2: 1, FEMALE_1: 2, FEMALE_2: 3 };
-let p1CharType = CHAR_TYPES.MALE_1; let p2CharType = CHAR_TYPES.FEMALE_1;
+let p1CharType = CHAR_TYPES.MALE_1;
+let p2CharType = CHAR_TYPES.FEMALE_1;
 
 // 【優化】色彩計畫升級，加入暗部顏色以建立層次感
 const CHAR_PALETTES = {
-    [CHAR_TYPES.MALE_1]:   { hair: '#2c3e50', shirt: '#0984e3', pants: '#dfe6e9', skin: '#ffeaa7', darkSkin: '#eccc68', style: 'boy' },      
-    [CHAR_TYPES.MALE_2]:   { hair: '#8e44ad', shirt: '#d63031', pants: '#2d3436', skin: '#ffeaa7', darkSkin: '#eccc68', style: 'boy' },      
-    [CHAR_TYPES.FEMALE_1]: { hair: '#d35400', shirt: '#00b894', pants: '#ffeaa7', skin: '#ffdfba', darkSkin: '#ffb703', style: 'girl_pony' },
-    [CHAR_TYPES.FEMALE_2]: { hair: '#2d3436', shirt: '#fd79a8', pants: '#636e72', skin: '#ffdfba', darkSkin: '#ffb703', style: 'girl_short' }
+    [CHAR_TYPES.MALE_1]:   { hair: '#2c3e50', shirt: '#0984e3', pants: '#dfe6e9', skin: '#ffeaa7', darkSkin: '#eccc68', style: 'boy_cap_vest' },      
+    [CHAR_TYPES.MALE_2]:   { hair: '#8e44ad', shirt: '#d63031', pants: '#2d3436', skin: '#ffeaa7', darkSkin: '#eccc68', style: 'boy_cap_vest' },      
+    [CHAR_TYPES.FEMALE_1]: { hair: '#d35400', shirt: '#00b894', pants: '#ffeaa7', skin: '#ffdfba', darkSkin: '#ffb703', style: 'girl_pony_uniform' },
+    [CHAR_TYPES.FEMALE_2]: { hair: '#2d3436', shirt: '#fd79a8', pants: '#636e72', skin: '#ffdfba', darkSkin: '#ffb703', style: 'girl_pony_uniform' }
 };
 
 const TYPE = { NORMAL: 0, SPIKE: 1, BELT_LEFT: 2, BELT_RIGHT: 3, BONUS: 4, SPEED_UP: 5, SPEED_DOWN: 6 };
@@ -168,16 +182,16 @@ function drawFriendlyCharacter(ctx, x, y, charType, facingRight, animFrame, isDe
 
     // 10. 頭髮與髮型細節
     ctx.fillStyle = p.hair;
-    if (p.style === 'boy') {
+    if (p.style === 'boy_cap_vest') {
         ctx.beginPath(); ctx.roundRect(-13, -22, 26, 8, 4); ctx.fill(); 
         ctx.beginPath(); ctx.moveTo(5, -22); ctx.lineTo(12, -26); ctx.lineTo(12, -22); ctx.fill(); // 呆毛
         ctx.fillRect(-12, -15, 6, 6); 
-    } else if (p.style === 'girl_pony') {
+    } else if (p.style === 'girl_pony_uniform') {
         ctx.beginPath(); ctx.roundRect(-13, -22, 26, 8, 4); ctx.fill(); 
         ctx.beginPath(); ctx.arc(-14, -12, 6, 0, Math.PI*2); ctx.fill(); 
         ctx.save(); ctx.translate(-14, -12); ctx.rotate(Math.sin(animFrame) * 0.3 + 0.2); // 馬尾跟著節奏甩動
         ctx.beginPath(); ctx.ellipse(-6, 8, 4, 14, -0.3, 0, Math.PI*2); ctx.fill(); ctx.restore();
-    } else if (p.style === 'girl_short') {
+    } else if (p.style === 'girl_pony_uniform') { // Variant? Let's just make it same for now.
         ctx.beginPath(); ctx.roundRect(-13, -22, 26, 10, 4); ctx.fill();
         ctx.fillRect(-13, -12, 7, 12); 
         ctx.fillRect(8, -12, 5, 8); 
@@ -198,7 +212,9 @@ function drawFriendlyCharacter(ctx, x, y, charType, facingRight, animFrame, isDe
 
 function drawPremiumPlatform(ctx, x, y, w, h, type, timeOffset) {
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.beginPath(); ctx.roundRect(x, y + 4, w, h, 6); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.beginPath(); ctx.roundRect(x, y + 4, w, h, 6); ctx.fill();
+
     ctx.beginPath();
     if (type === TYPE.BELT_LEFT || type === TYPE.BELT_RIGHT) {
         ctx.arc(x + h/2, y + h/2, h/2, Math.PI/2, Math.PI*1.5); ctx.lineTo(x + w - h/2, y); ctx.arc(x + w - h/2, y + h/2, h/2, Math.PI*1.5, Math.PI/2);
@@ -208,9 +224,11 @@ function drawPremiumPlatform(ctx, x, y, w, h, type, timeOffset) {
     let topC = '#f1f5f9', midC = '#e2e8f0', botC = '#64748b';
     const grad = ctx.createLinearGradient(x, y, x, y + h);
     grad.addColorStop(0, topC); grad.addColorStop(0.3, midC); grad.addColorStop(1, botC); 
-    ctx.fillStyle = grad; ctx.fill(); ctx.strokeStyle = '#475569'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = grad; ctx.fill();
+    ctx.strokeStyle = '#475569'; ctx.lineWidth = 1.5; ctx.stroke();
 
-    ctx.save(); ctx.clip(); ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2;
+    ctx.save(); ctx.clip();
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2;
     if (type === TYPE.BELT_LEFT || type === TYPE.BELT_RIGHT) {
         ctx.beginPath(); ctx.arc(x + h/2, y + h/2, h/2 - 1, Math.PI/2, Math.PI*1.5); ctx.lineTo(x + w - h/2, y + 1); ctx.arc(x + w - h/2, y + h/2, h/2 - 1, Math.PI*1.5, Math.PI/2); ctx.closePath(); ctx.stroke();
     } else { ctx.strokeRect(x + 1, y + 1, w - 2, h - 2); }
@@ -226,20 +244,24 @@ function drawPremiumPlatform(ctx, x, y, w, h, type, timeOffset) {
             ctx.save(); ctx.translate(x + drawX, y + h/2); if (dir === 'left') ctx.scale(-1, 1);
             ctx.fillStyle = dir === 'left' ? '#2980b9' : '#8e44ad'; 
             ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(2, 6); ctx.lineTo(2, -6); ctx.closePath(); ctx.fill();
-            ctx.fillRect(-2, -3, 2, 6); ctx.fillRect(-6, -3, 2, 6); ctx.restore();
+            ctx.fillRect(-2, -3, 2, 6); ctx.fillRect(-6, -3, 2, 6);
+            ctx.restore();
         }
         ctx.restore();
     }
 
-    const rx1 = x + (type===TYPE.BELT_LEFT||type===TYPE.BELT_RIGHT ? h/2 : 12); const rx2 = x + w - (type===TYPE.BELT_LEFT||type===TYPE.BELT_RIGHT ? h/2 : 12);
+    const rx1 = x + (type===TYPE.BELT_LEFT||type===TYPE.BELT_RIGHT ? h/2 : 12);
+    const rx2 = x + w - (type===TYPE.BELT_LEFT||type===TYPE.BELT_RIGHT ? h/2 : 12);
     ctx.fillStyle = '#334155'; ctx.beginPath(); ctx.arc(rx1, y+h/2, 2.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(rx2, y+h/2, 2.5, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(rx1 - 0.5, y+h/2 - 0.5, 1, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(rx2 - 0.5, y+h/2 - 0.5, 1, 0, Math.PI*2); ctx.fill();
+
     ctx.restore();
 }
 
 function drawSpikes(ctx, x, y, w) {
     for (let i = 0; i < w; i += 16) {
-        const spikeW = Math.min(16, w - i); const sx = x + i;
+        const spikeW = Math.min(16, w - i);
+        const sx = x + i;
         const grad = ctx.createLinearGradient(sx, y, sx + spikeW, y);
         grad.addColorStop(0, '#94a3b8'); grad.addColorStop(0.5, '#f8fafc'); grad.addColorStop(1, '#475569');
         ctx.fillStyle = grad;
@@ -252,11 +274,16 @@ function drawSpikes(ctx, x, y, w) {
 function drawSpeedArrows(ctx, x, y, type) {
     ctx.save();
     ctx.strokeStyle = type === TYPE.SPEED_UP ? '#e74c3c' : '#0984e3'; 
-    ctx.lineWidth = 4; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.lineWidth = 4;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
     for (let i = -15; i <= 15; i += 15) {
         ctx.beginPath();
-        if (type === TYPE.SPEED_UP) { ctx.moveTo(x + i - 6, y + 4); ctx.lineTo(x + i, y - 6); ctx.lineTo(x + i + 6, y + 4); } 
-        else { ctx.moveTo(x + i - 6, y - 6); ctx.lineTo(x + i, y + 4); ctx.lineTo(x + i + 6, y - 6); }
+        if (type === TYPE.SPEED_UP) {
+            ctx.moveTo(x + i - 6, y + 4); ctx.lineTo(x + i, y - 6); ctx.lineTo(x + i + 6, y + 4);
+        } else {
+            ctx.moveTo(x + i - 6, y - 6); ctx.lineTo(x + i, y + 4); ctx.lineTo(x + i + 6, y - 6);
+        }
         ctx.stroke();
     }
     ctx.restore();
@@ -276,8 +303,10 @@ class Player {
         if (fullReset) this.revivesLeft = 3; 
         this.x = (gameMode === 1 && this.id === '1P') ? GAME_WIDTH / 2 : this.startX;
         this.y = 100; this.vx = 0; this.vy = 0; 
-        this.life = 8; this.maxLife = 8; this.isDead = false; 
-        this.damageCooldown = 150; this.facingRight = true; this.animFrame = 0;
+        this.life = 8; this.maxLife = 8;
+        this.isDead = false; 
+        this.damageCooldown = 150; 
+        this.facingRight = true; this.animFrame = 0;
         this.charType = this.id === '1P' ? p1CharType : p2CharType;
     }
     update() {
@@ -304,14 +333,22 @@ class Player {
         
         if (this.y > GAME_HEIGHT || this.life <= 0) {
             if (this.revivesLeft > 0) {
-                this.revivesLeft--; this.life = this.maxLife;
+                this.revivesLeft--;
+                this.life = this.maxLife;
                 let safePlatforms = platforms.filter(p => p.y > 100 && p.y < GAME_HEIGHT - 200 && p.type !== TYPE.SPIKE);
                 let safeP = safePlatforms.length > 0 ? safePlatforms[0] : platforms[0];
-                this.x = safeP.x + safeP.width / 2; this.y = safeP.y - 100; this.vy = 0; this.damageCooldown = 150; 
-            } else { this.isDead = true; }
+                this.x = safeP.x + safeP.width / 2;
+                this.y = safeP.y - 100;
+                this.vy = 0;
+                this.damageCooldown = 150; 
+            } else {
+                this.isDead = true;
+            }
         }
     }
-    draw(ctx) { drawFriendlyCharacter(ctx, this.x, this.y - this.height/2 + 4, this.charType, this.facingRight, this.animFrame, this.isDead, this.damageCooldown); }
+    draw(ctx) {
+        drawFriendlyCharacter(ctx, this.x, this.y - this.height/2 + 4, this.charType, this.facingRight, this.animFrame, this.isDead, this.damageCooldown);
+    }
 }
 
 const p1 = new Player('1P', { left: 'ArrowLeft', right: 'ArrowRight', down: 'ArrowDown' }); 
@@ -321,7 +358,8 @@ const p2 = new Player('2P', { left: 'KeyA', right: 'KeyD', down: 'KeyS' });
 // 平台系統與精準機率
 // ==========================================
 function generatePlatformData() {
-    let type = TYPE.NORMAL; let items = []; const baseRand = Math.random();
+    let type = TYPE.NORMAL; let items = [];
+    const baseRand = Math.random();
     
     if (baseRand < 0.20) type = TYPE.SPIKE;
     else if (baseRand < 0.35) type = TYPE.BELT_LEFT;
@@ -330,16 +368,23 @@ function generatePlatformData() {
     if (type === TYPE.NORMAL || type === TYPE.BELT_LEFT || type === TYPE.BELT_RIGHT) {
         let itemRand = Math.random();
         if (itemRand < 0.25) {
-            type = TYPE.BONUS; const heartCount = Math.floor(Math.random() * 3) + 1; 
+            type = TYPE.BONUS; 
+            const heartCount = Math.floor(Math.random() * 3) + 1; 
             for(let i=0; i<heartCount; i++) items.push('heart');
-        } else if (itemRand >= 0.25 && itemRand < 0.28) { type = TYPE.SPEED_UP; items.push('speedup'); } 
-        else if (itemRand >= 0.28 && itemRand < 0.38) { type = TYPE.SPEED_DOWN; items.push('speeddown'); }
+        } else if (itemRand >= 0.25 && itemRand < 0.28) {
+            type = TYPE.SPEED_UP; items.push('speedup');
+        } else if (itemRand >= 0.28 && itemRand < 0.38) {
+            type = TYPE.SPEED_DOWN; items.push('speeddown');
+        }
     }
     return { type, items };
 }
 
 function createPlatform(y, isFirst = false) {
-    if (isFirst) { platforms.push({ x: GAME_WIDTH / 2 - 120, y, width: 240, height: 28, type: TYPE.NORMAL, items: [] }); return; }
+    if (isFirst) {
+        platforms.push({ x: GAME_WIDTH / 2 - 120, y, width: 240, height: 28, type: TYPE.NORMAL, items: [] });
+        return;
+    }
     const twoPlatforms = Math.random() < 0.4;
     if (twoPlatforms) {
         let w1 = 80 + Math.random() * 60; let x1 = Math.random() * (GAME_WIDTH / 2 - w1);
@@ -347,7 +392,8 @@ function createPlatform(y, isFirst = false) {
         let w2 = 80 + Math.random() * 60; let x2 = GAME_WIDTH / 2 + Math.random() * (GAME_WIDTH / 2 - w2);
         let data2 = generatePlatformData(); platforms.push({ x: x2, y, width: w2, height: 28, type: data2.type, items: data2.items });
     } else {
-        let w = 150 + Math.random() * 100; let prevP = platforms[platforms.length - 1];
+        let w = 150 + Math.random() * 100;
+        let prevP = platforms[platforms.length - 1];
         let minX = Math.max(0, prevP.x - w + 40); let maxX = Math.min(GAME_WIDTH - w, prevP.x + prevP.width - 40);
         if (maxX < minX) { minX = 0; maxX = GAME_WIDTH - w; } 
         let x = minX + Math.random() * (maxX - minX);
@@ -356,7 +402,9 @@ function createPlatform(y, isFirst = false) {
 }
 
 function initPlatforms() {
-    platforms = []; createPlatform(300, true); let currentY = 300;
+    platforms = []; 
+    createPlatform(300, true);
+    let currentY = 300;
     for (let i = 1; i < 7; i++) { currentY += CONFIG.GAP_DISTANCE; createPlatform(currentY); }
 }
 
@@ -377,7 +425,8 @@ function checkGameOver() {
 
 function update() {
     if (gameState !== STATE.PLAYING) return;
-    p1.update(); if (gameMode === 2) p2.update(); checkGameOver();
+    p1.update(); if (gameMode === 2) p2.update();
+    checkGameOver();
 
     platforms.forEach(p => p.y -= currentPlatformSpeed);
 
@@ -442,13 +491,15 @@ function drawPlatforms() {
     const timeOffset = Date.now() / 150;
     platforms.forEach(p => {
         drawPremiumPlatform(ctx, p.x, p.y, p.width, p.height, p.type, timeOffset);
+
         if (p.type === TYPE.SPIKE) drawSpikes(ctx, p.x, p.y, p.width);
         
         if (p.items && p.items.length > 0) {
             let heartRendered = 0;
             p.items.forEach((item) => {
                 if (item === 'heart') {
-                    const spacing = 35; const totalHearts = p.items.filter(i => i==='heart').length;
+                    const spacing = 35;
+                    const totalHearts = p.items.filter(i => i==='heart').length;
                     const startX = (p.x + p.width/2) - ((totalHearts-1) * spacing / 2);
                     drawPixelHeart(ctx, startX + (heartRendered * spacing), p.y - 20, 1.2, true); heartRendered++;
                 } else if (item === 'speedup') { drawSpeedArrows(ctx, p.x + p.width/2, p.y + p.height/2, TYPE.SPEED_UP); } 
@@ -459,26 +510,45 @@ function drawPlatforms() {
     drawPremiumPlatform(ctx, 0, 0, GAME_WIDTH, 15, TYPE.NORMAL, 0);
 }
 
+// 【優化】修復 HUD 排版重疊與擠在一起的問題
 function drawHUD() {
     if (gameState === STATE.START) return;
     
     const panelGrad = ctx.createLinearGradient(15, 15, 15, 95);
     panelGrad.addColorStop(0, '#f8fafc'); panelGrad.addColorStop(0.5, '#e2e8f0'); panelGrad.addColorStop(1, '#cbd5e1');
     ctx.fillStyle = panelGrad; ctx.shadowColor = 'rgba(0,0,0,0.15)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 4;
-    ctx.beginPath(); ctx.roundRect(15, 15, 300, 80, 8); ctx.fill(); ctx.shadowColor = 'transparent';
+    ctx.beginPath(); 
+    ctx.roundRect(15, 15, 300, 80, 8); // 將面板加寬至 300px
+    ctx.fill(); ctx.shadowColor = 'transparent';
     ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 2; ctx.stroke();
 
     const drawLife = (player, baseX, baseY) => {
         if(player.isDead) return;
-        for (let i = 0; i < 4; i++) { drawPixelHeart(ctx, baseX + 15 + (i * 26), baseY + 15, 1.0, player.life >= (i+1)*2); }
-        ctx.save(); ctx.translate(baseX + 15, baseY + 50); ctx.scale(0.6, 0.6); 
-        drawFriendlyCharacter(ctx, 0, 0, player.charType, true, 0, false, 0); ctx.restore();
-        ctx.fillStyle = '#2f3542'; ctx.font = 'bold 18px Arial'; ctx.textAlign = 'left'; ctx.fillText(player.id, baseX + 35, baseY + 55);
-        ctx.fillStyle = '#e67e22'; ctx.font = 'bold 14px Arial'; ctx.fillText(`👼 x${player.revivesLeft}`, baseX + 75, baseY + 53);
+        
+        // 1. 畫愛心 (上排)
+        for (let i = 0; i < 4; i++) {
+            drawPixelHeart(ctx, baseX + 15 + (i * 26), baseY + 15, 1.0, player.life >= (i+1)*2);
+        }
+
+        // 2. 畫角色頭像 ( Illustrated Avatars) (下排左)
+        ctx.save(); 
+        ctx.translate(baseX + 15, baseY + 50); 
+        ctx.scale(0.6, 0.6); // 縮小 illustrated 頭像圖
+        drawFriendlyCharacter(ctx, 0, 0, player.charType, true, 0, false, 0); 
+        ctx.restore();
+        
+        // 3. 畫 1P/2P 標籤與復活次數
+        ctx.fillStyle = '#2f3542'; ctx.font = 'bold 18px Arial'; ctx.textAlign = 'left'; 
+        ctx.fillText(player.id, baseX + 35, baseY + 55);
+        ctx.fillStyle = '#e67e22'; ctx.font = 'bold 14px Arial'; 
+        ctx.fillText(`👼 x${player.revivesLeft}`, baseX + 75, baseY + 53);
     };
     
-    drawLife(p1, 20, 20); if(gameMode === 2) drawLife(p2, 160, 20);
+    // 配置 1P 與 2P 的絕對 X 座標，絕對不會打架
+    drawLife(p1, 20, 20); 
+    if(gameMode === 2) drawLife(p2, 160, 20);
 
+    // 樓層與速度移至右方，避開左側面板
     ctx.fillStyle = '#2f3542'; ctx.font = 'bold 36px "Orbitron", monospace'; ctx.textAlign = 'left';
     ctx.fillText(`第 ${String(floorCount).padStart(4, '0')} 層`, 330, 55);
     ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(330, 70); ctx.lineTo(580, 70); ctx.stroke();
@@ -489,14 +559,18 @@ function drawHUD() {
 function drawUI() {
     if (gameState === STATE.START) {
         ctx.fillStyle = 'rgba(248, 250, 252, 0.95)'; ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-        ctx.fillStyle = '#2d3436'; ctx.textAlign = 'center'; ctx.font = 'bold 50px Arial'; ctx.fillText('瘋狂下樓梯', GAME_WIDTH / 2, 140);
+        ctx.fillStyle = '#2d3436'; ctx.textAlign = 'center'; ctx.font = 'bold 50px Arial'; 
+        ctx.fillText('瘋狂下樓梯', GAME_WIDTH / 2, 140);
         ctx.fillStyle = '#64748b'; ctx.font = 'bold 18px Arial'; ctx.fillText('請使用滑鼠點擊選擇對戰編組', GAME_WIDTH / 2, 190);
 
         const drawBtn = (id, label, x, y, mode, isP2) => {
             const sel = selectedSetup === mode;
-            ctx.fillStyle = sel ? (isP2 ? '#f39c12' : '#0984e3') : '#ffffff'; ctx.strokeStyle = sel ? '#2d3436' : '#cbd5e1'; ctx.lineWidth = 2.5;
+            ctx.fillStyle = sel ? (isP2 ? '#f39c12' : '#0984e3') : '#ffffff';
+            ctx.strokeStyle = sel ? '#2d3436' : '#cbd5e1'; ctx.lineWidth = 2.5;
             ctx.beginPath(); ctx.roundRect(x, y, 250, 75, 10); ctx.fill(); ctx.stroke();
-            ctx.fillStyle = sel ? '#ffffff' : '#2d3436'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'left'; ctx.fillText(`按鍵 ${id} : ${label}`, x + 15, y + 30);
+            ctx.fillStyle = sel ? '#ffffff' : '#2d3436'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'left';
+            ctx.fillText(`按鍵 ${id} : ${label}`, x + 15, y + 30);
+
             ctx.save(); ctx.translate(x + 180, y + 35); ctx.scale(0.6, 0.6); 
             if (mode === MODES.P1_MALE) drawFriendlyCharacter(ctx, 0, 0, CHAR_TYPES.MALE_1, true, 0, false, 0);
             else if (mode === MODES.P1_FEMALE) drawFriendlyCharacter(ctx, 0, 0, CHAR_TYPES.FEMALE_1, true, 0, false, 0);
@@ -533,7 +607,8 @@ function drawUI() {
 
     if (gameState === STATE.LEADERBOARD) {
         ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-        ctx.fillStyle = '#38bdf8'; ctx.textAlign = 'center'; ctx.font = 'bold 40px Arial'; ctx.fillText('🏆 TOP 10 排行榜', GAME_WIDTH / 2, 80);
+        ctx.fillStyle = '#38bdf8'; ctx.textAlign = 'center'; ctx.font = 'bold 40px Arial'; 
+        ctx.fillText('🏆 TOP 10 排行榜', GAME_WIDTH / 2, 80);
 
         const lb = getLeaderboard();
         ctx.fillStyle = '#94a3b8'; ctx.font = 'bold 18px Arial'; ctx.textAlign = 'left'; 
