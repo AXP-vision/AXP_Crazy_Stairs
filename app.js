@@ -1,4 +1,19 @@
-// app.js - AXP Final Commercial Edition: Speed Step 1.5 per 10 floors
+// app.js - AXP Final Commercial Edition: Premium Character Visuals
+
+// ==========================================
+// 🛡️ AXP 商業防護：網域鎖定 (防盜連)
+// ==========================================
+const allowedDomains = [
+    "localhost", 
+    "127.0.0.1", 
+    "axp-vision.github.io", 
+    "rabbit-turtle-m792.squarespace.com" 
+];
+
+if (!allowedDomains.includes(window.location.hostname)) {
+    document.body.innerHTML = `<h2 style="color:#e74c3c; text-align:center; margin-top:20vh; font-family:Arial;">⚠️ 未經授權的使用 (Unauthorized Access)</h2><p style="color:#7f8c8d; text-align:center;">此視覺訓練工具僅限 AXP 官方授權網域使用。</p>`;
+    throw new Error("Domain Security Check Failed."); 
+}
 
 const container = document.getElementById('canvas-container');
 container.innerHTML = ''; 
@@ -45,44 +60,30 @@ function saveToLeaderboard(name, floors) {
     catch (e) { console.warn("無法儲存排行榜資料"); }
 }
 
-const MODES = {
-    P1_MALE: 1, P1_FEMALE: 2, 
-    P2_MALE_FEMALE: 3, P2_MALE_MALE: 4, P2_FEMALE_FEMALE: 5, P2_FEMALE_MALE: 6
-};
+const MODES = { P1_MALE: 1, P1_FEMALE: 2, P2_MALE_FEMALE: 3, P2_MALE_MALE: 4, P2_FEMALE_FEMALE: 5, P2_FEMALE_MALE: 6 };
 let selectedSetup = MODES.P1_MALE; 
 let gameMode = 1; 
 
-const CONFIG = {
-    START_SPEED: 1.5,      
-    MAX_SPEED: 4.0,    // 放寬極速，讓 +1.5 可以發揮作用    
-    SPEED_STEP: 1.5,   // 每 10 層加速的基準設定   
-    GAP_DISTANCE: 165      
-};
-
+const CONFIG = { START_SPEED: 1.5, MAX_SPEED: 4.0, SPEED_STEP: 0.2, GAP_DISTANCE: 165 };
 let currentPlatformSpeed = CONFIG.START_SPEED;
 
-// 競技級別物理手感
 const GRAVITY = 0.4;
 const MAX_FALL_SPEED = 9.0;
 const MAX_MOVE_SPEED = 5.0; 
 const MOVE_ACCEL = 1.0; 
 const FRICTION = 0.85;
 
-let floorCount = 1;
-let platforms = [];
-let keys = {};
-let bgOffsetY = 0;
-let speedPairPending = false; 
+let floorCount = 1; let platforms = []; let keys = {}; let bgOffsetY = 0;
 
 const CHAR_TYPES = { MALE_1: 0, MALE_2: 1, FEMALE_1: 2, FEMALE_2: 3 };
-let p1CharType = CHAR_TYPES.MALE_1;
-let p2CharType = CHAR_TYPES.FEMALE_1;
+let p1CharType = CHAR_TYPES.MALE_1; let p2CharType = CHAR_TYPES.FEMALE_1;
 
+// 【優化】色彩計畫升級，加入暗部顏色以建立層次感
 const CHAR_PALETTES = {
-    [CHAR_TYPES.MALE_1]:   { hair: '#8B4513', shirt: '#1B1464', pants: '#ecf0f1', skin: '#ffeaa7', style: 'boy' },      
-    [CHAR_TYPES.MALE_2]:   { hair: '#2d3436', shirt: '#c0392b', pants: '#5c2c16', skin: '#ffeaa7', style: 'boy' },      
-    [CHAR_TYPES.FEMALE_1]: { hair: '#2d3436', shirt: '#74b9ff', pants: '#e67e22', skin: '#ffeaa7', style: 'girl_pony' },
-    [CHAR_TYPES.FEMALE_2]: { hair: '#8B4513', shirt: '#2d3436', pants: '#f5cd79', skin: '#ffeaa7', style: 'girl_short' }
+    [CHAR_TYPES.MALE_1]:   { hair: '#2c3e50', shirt: '#0984e3', pants: '#dfe6e9', skin: '#ffeaa7', darkSkin: '#eccc68', style: 'boy' },      
+    [CHAR_TYPES.MALE_2]:   { hair: '#8e44ad', shirt: '#d63031', pants: '#2d3436', skin: '#ffeaa7', darkSkin: '#eccc68', style: 'boy' },      
+    [CHAR_TYPES.FEMALE_1]: { hair: '#d35400', shirt: '#00b894', pants: '#ffeaa7', skin: '#ffdfba', darkSkin: '#ffb703', style: 'girl_pony' },
+    [CHAR_TYPES.FEMALE_2]: { hair: '#2d3436', shirt: '#fd79a8', pants: '#636e72', skin: '#ffdfba', darkSkin: '#ffb703', style: 'girl_short' }
 };
 
 const TYPE = { NORMAL: 0, SPIKE: 1, BELT_LEFT: 2, BELT_RIGHT: 3, BONUS: 4, SPEED_UP: 5, SPEED_DOWN: 6 };
@@ -100,63 +101,104 @@ function drawPixelHeart(ctx, x, y, size, isFull) {
     ctx.restore();
 }
 
+// 【全新重寫】超精緻 Q 版角色渲染引擎
 function drawFriendlyCharacter(ctx, x, y, charType, facingRight, animFrame, isDead, damageCooldown) {
     if (isDead || (damageCooldown > 0 && Math.floor(Date.now() / 50) % 2 === 0)) return;
     const p = CHAR_PALETTES[charType];
     
-    ctx.save(); ctx.translate(x, y); 
+    ctx.save(); 
+    ctx.translate(x, y); 
     if (!facingRight) ctx.scale(-1, 1); 
     
-    ctx.fillStyle = p.skin; 
-    ctx.beginPath(); ctx.roundRect(-12, -18, 24, 20, 6); ctx.fill(); 
-    ctx.beginPath(); ctx.roundRect(10, -9, 4, 4, 2); ctx.fill();
-
-    ctx.fillStyle = '#2d3436'; 
-    ctx.beginPath(); ctx.arc(2, -10, 2.5, 0, Math.PI*2); ctx.fill(); 
-    ctx.beginPath(); ctx.arc(9, -10, 2.5, 0, Math.PI*2); ctx.fill(); 
-    ctx.strokeStyle = '#2d3436'; ctx.lineWidth = 1.5; 
-    ctx.beginPath(); ctx.arc(5.5, -4, 3, 0, Math.PI); ctx.stroke(); 
+    // 動態變數計算
+    const bob = Math.abs(Math.sin(animFrame)) * 2; // 身體上下彈跳
+    const swing = Math.sin(animFrame) * 6;         // 手腳擺動幅度
     
+    // 1. 角色底下的動態陰影
+    ctx.fillStyle = 'rgba(0,0,0,0.15)';
+    ctx.beginPath(); 
+    ctx.ellipse(0, 20, 12 - bob, 3, 0, 0, Math.PI*2); 
+    ctx.fill();
+
+    // 將繪圖原點套用上下彈跳
+    ctx.translate(0, -bob);
+
+    // 2. 後方的手 (較暗)
+    ctx.fillStyle = p.darkSkin;
+    ctx.beginPath(); ctx.roundRect(1 - swing, 2, 4, 10, 2); ctx.fill();
+
+    // 3. 後方的腳與鞋子 (較暗)
+    ctx.fillStyle = p.pants;
+    ctx.beginPath(); ctx.roundRect(1 - swing/1.5, 12, 6, 12, 2); ctx.fill();
+    ctx.fillStyle = '#2d3436'; // 鞋子
+    ctx.beginPath(); ctx.roundRect(1 - swing/1.5, 21, 8, 4, 2); ctx.fill();
+
+    // 4. 身體
     ctx.fillStyle = p.shirt; 
-    ctx.beginPath(); ctx.roundRect(-9, 2, 18, 16, 4); ctx.fill(); ctx.strokeRect(-9, 2, 18, 16); 
-    ctx.fillStyle = p.pants; 
-    ctx.beginPath(); ctx.moveTo(-3, 2); ctx.lineTo(3, 2); ctx.lineTo(0, 7); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(-8, 2, 16, 14, 4); ctx.fill(); 
+
+    // 5. 前方的腳與鞋子
+    ctx.fillStyle = p.pants;
+    ctx.beginPath(); ctx.roundRect(-7 + swing/1.5, 12, 6, 12, 2); ctx.fill();
+    ctx.fillStyle = '#2d3436'; // 鞋子
+    ctx.beginPath(); ctx.roundRect(-7 + swing/1.5, 21, 8, 4, 2); ctx.fill();
+
+    // 6. 頭部基底
+    ctx.fillStyle = p.skin;
+    ctx.beginPath(); ctx.roundRect(-12, -20, 24, 22, 8); ctx.fill(); 
+
+    // 7. 微醺腮紅
+    ctx.fillStyle = 'rgba(255, 118, 117, 0.5)';
+    ctx.beginPath(); ctx.arc(-6, -5, 3.5, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(8, -5, 3.5, 0, Math.PI*2); ctx.fill();
+
+    // 8. 靈魂大眼睛
+    ctx.fillStyle = '#2d3436';
+    ctx.beginPath(); ctx.ellipse(-4, -9, 2.5, 4, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(6, -9, 2.5, 4, 0, 0, Math.PI*2); ctx.fill();
     
-    ctx.fillStyle = p.pants; 
-    const swing = Math.sin(animFrame) * 6;
-    ctx.beginPath(); ctx.roundRect(-7 + swing/2, 18, 6, 12, 2); ctx.fill(); 
-    ctx.fillRect(-7 + swing/2, 27, 8, 3); 
-    ctx.beginPath(); ctx.roundRect(1 - swing/2, 18, 6, 12, 2); ctx.fill(); 
-    ctx.fillRect(1 - swing/2, 27, 8, 3); 
+    // 眼睛高光 (白點)
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.arc(-4.5, -10.5, 1.2, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(5.5, -10.5, 1.2, 0, Math.PI*2); ctx.fill();
 
-    ctx.fillStyle = p.skin; 
-    ctx.beginPath(); ctx.arc(-3 - swing, 13, 3.5, 0, Math.PI*2); ctx.fill(); 
-    ctx.beginPath(); ctx.arc(5 + swing, 13, 3.5, 0, Math.PI*2); ctx.fill(); 
-    ctx.fillStyle = p.shirt;
-    ctx.beginPath(); ctx.arc(-3 - swing, 8, 4.5, 0, Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(5 + swing, 8, 4.5, 0, Math.PI*2); ctx.fill();
+    // 9. 嘴巴
+    ctx.strokeStyle = '#2d3436'; ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(1, -3, 3, 0.2, Math.PI - 0.2); ctx.stroke();
 
+    // 10. 頭髮與髮型細節
     ctx.fillStyle = p.hair;
     if (p.style === 'boy') {
-        ctx.beginPath(); ctx.roundRect(-13, -20, 26, 8, 4); ctx.fill(); 
-        ctx.fillRect(0, -14, 16, 4); 
+        ctx.beginPath(); ctx.roundRect(-13, -22, 26, 8, 4); ctx.fill(); 
+        ctx.beginPath(); ctx.moveTo(5, -22); ctx.lineTo(12, -26); ctx.lineTo(12, -22); ctx.fill(); // 呆毛
+        ctx.fillRect(-12, -15, 6, 6); 
     } else if (p.style === 'girl_pony') {
-        ctx.beginPath(); ctx.roundRect(-13, -20, 26, 8, 4); ctx.fill(); 
+        ctx.beginPath(); ctx.roundRect(-13, -22, 26, 8, 4); ctx.fill(); 
         ctx.beginPath(); ctx.arc(-14, -12, 6, 0, Math.PI*2); ctx.fill(); 
-        ctx.save(); ctx.translate(-14, -12); ctx.rotate(Math.sin(animFrame) * 0.2 + 0.2); ctx.beginPath(); ctx.ellipse(-6, 8, 4, 14, -0.3, 0, Math.PI*2); ctx.fill(); ctx.restore();
+        ctx.save(); ctx.translate(-14, -12); ctx.rotate(Math.sin(animFrame) * 0.3 + 0.2); // 馬尾跟著節奏甩動
+        ctx.beginPath(); ctx.ellipse(-6, 8, 4, 14, -0.3, 0, Math.PI*2); ctx.fill(); ctx.restore();
     } else if (p.style === 'girl_short') {
-        ctx.beginPath(); ctx.roundRect(-13, -20, 26, 10, 4); ctx.fill();
-        ctx.fillRect(-13, -10, 6, 12); 
-        ctx.fillRect(7, -10, 4, 8); 
+        ctx.beginPath(); ctx.roundRect(-13, -22, 26, 10, 4); ctx.fill();
+        ctx.fillRect(-13, -12, 7, 12); 
+        ctx.fillRect(8, -12, 5, 8); 
     }
+
+    // 頭髮的高光反光圈
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.beginPath(); ctx.roundRect(-8, -20, 10, 3, 2); ctx.fill();
+
+    // 11. 前方的手與袖子
+    ctx.fillStyle = p.skin;
+    ctx.beginPath(); ctx.roundRect(-5 + swing, 2, 4, 10, 2); ctx.fill();
+    ctx.fillStyle = p.shirt; // 袖子
+    ctx.beginPath(); ctx.roundRect(-5 + swing, 2, 4, 4, 2); ctx.fill();
+
     ctx.restore();
 }
 
 function drawPremiumPlatform(ctx, x, y, w, h, type, timeOffset) {
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.15)';
-    ctx.beginPath(); ctx.roundRect(x, y + 4, w, h, 6); ctx.fill();
-
+    ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.beginPath(); ctx.roundRect(x, y + 4, w, h, 6); ctx.fill();
     ctx.beginPath();
     if (type === TYPE.BELT_LEFT || type === TYPE.BELT_RIGHT) {
         ctx.arc(x + h/2, y + h/2, h/2, Math.PI/2, Math.PI*1.5); ctx.lineTo(x + w - h/2, y); ctx.arc(x + w - h/2, y + h/2, h/2, Math.PI*1.5, Math.PI/2);
@@ -166,11 +208,9 @@ function drawPremiumPlatform(ctx, x, y, w, h, type, timeOffset) {
     let topC = '#f1f5f9', midC = '#e2e8f0', botC = '#64748b';
     const grad = ctx.createLinearGradient(x, y, x, y + h);
     grad.addColorStop(0, topC); grad.addColorStop(0.3, midC); grad.addColorStop(1, botC); 
-    ctx.fillStyle = grad; ctx.fill();
-    ctx.strokeStyle = '#475569'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = grad; ctx.fill(); ctx.strokeStyle = '#475569'; ctx.lineWidth = 1.5; ctx.stroke();
 
-    ctx.save(); ctx.clip();
-    ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2;
+    ctx.save(); ctx.clip(); ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2;
     if (type === TYPE.BELT_LEFT || type === TYPE.BELT_RIGHT) {
         ctx.beginPath(); ctx.arc(x + h/2, y + h/2, h/2 - 1, Math.PI/2, Math.PI*1.5); ctx.lineTo(x + w - h/2, y + 1); ctx.arc(x + w - h/2, y + h/2, h/2 - 1, Math.PI*1.5, Math.PI/2); ctx.closePath(); ctx.stroke();
     } else { ctx.strokeRect(x + 1, y + 1, w - 2, h - 2); }
@@ -186,24 +226,20 @@ function drawPremiumPlatform(ctx, x, y, w, h, type, timeOffset) {
             ctx.save(); ctx.translate(x + drawX, y + h/2); if (dir === 'left') ctx.scale(-1, 1);
             ctx.fillStyle = dir === 'left' ? '#2980b9' : '#8e44ad'; 
             ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(2, 6); ctx.lineTo(2, -6); ctx.closePath(); ctx.fill();
-            ctx.fillRect(-2, -3, 2, 6); ctx.fillRect(-6, -3, 2, 6);
-            ctx.restore();
+            ctx.fillRect(-2, -3, 2, 6); ctx.fillRect(-6, -3, 2, 6); ctx.restore();
         }
         ctx.restore();
     }
 
-    const rx1 = x + (type===TYPE.BELT_LEFT||type===TYPE.BELT_RIGHT ? h/2 : 12);
-    const rx2 = x + w - (type===TYPE.BELT_LEFT||type===TYPE.BELT_RIGHT ? h/2 : 12);
+    const rx1 = x + (type===TYPE.BELT_LEFT||type===TYPE.BELT_RIGHT ? h/2 : 12); const rx2 = x + w - (type===TYPE.BELT_LEFT||type===TYPE.BELT_RIGHT ? h/2 : 12);
     ctx.fillStyle = '#334155'; ctx.beginPath(); ctx.arc(rx1, y+h/2, 2.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(rx2, y+h/2, 2.5, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(rx1 - 0.5, y+h/2 - 0.5, 1, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(rx2 - 0.5, y+h/2 - 0.5, 1, 0, Math.PI*2); ctx.fill();
-
     ctx.restore();
 }
 
 function drawSpikes(ctx, x, y, w) {
     for (let i = 0; i < w; i += 16) {
-        const spikeW = Math.min(16, w - i);
-        const sx = x + i;
+        const spikeW = Math.min(16, w - i); const sx = x + i;
         const grad = ctx.createLinearGradient(sx, y, sx + spikeW, y);
         grad.addColorStop(0, '#94a3b8'); grad.addColorStop(0.5, '#f8fafc'); grad.addColorStop(1, '#475569');
         ctx.fillStyle = grad;
@@ -216,16 +252,11 @@ function drawSpikes(ctx, x, y, w) {
 function drawSpeedArrows(ctx, x, y, type) {
     ctx.save();
     ctx.strokeStyle = type === TYPE.SPEED_UP ? '#e74c3c' : '#0984e3'; 
-    ctx.lineWidth = 4;
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
+    ctx.lineWidth = 4; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     for (let i = -15; i <= 15; i += 15) {
         ctx.beginPath();
-        if (type === TYPE.SPEED_UP) {
-            ctx.moveTo(x + i - 6, y + 4); ctx.lineTo(x + i, y - 6); ctx.lineTo(x + i + 6, y + 4);
-        } else {
-            ctx.moveTo(x + i - 6, y - 6); ctx.lineTo(x + i, y + 4); ctx.lineTo(x + i + 6, y - 6);
-        }
+        if (type === TYPE.SPEED_UP) { ctx.moveTo(x + i - 6, y + 4); ctx.lineTo(x + i, y - 6); ctx.lineTo(x + i + 6, y + 4); } 
+        else { ctx.moveTo(x + i - 6, y - 6); ctx.lineTo(x + i, y + 4); ctx.lineTo(x + i + 6, y - 6); }
         ctx.stroke();
     }
     ctx.restore();
@@ -245,10 +276,8 @@ class Player {
         if (fullReset) this.revivesLeft = 3; 
         this.x = (gameMode === 1 && this.id === '1P') ? GAME_WIDTH / 2 : this.startX;
         this.y = 100; this.vx = 0; this.vy = 0; 
-        this.life = 8; this.maxLife = 8;
-        this.isDead = false; 
-        this.damageCooldown = 150; 
-        this.facingRight = true; this.animFrame = 0;
+        this.life = 8; this.maxLife = 8; this.isDead = false; 
+        this.damageCooldown = 150; this.facingRight = true; this.animFrame = 0;
         this.charType = this.id === '1P' ? p1CharType : p2CharType;
     }
     update() {
@@ -275,22 +304,14 @@ class Player {
         
         if (this.y > GAME_HEIGHT || this.life <= 0) {
             if (this.revivesLeft > 0) {
-                this.revivesLeft--;
-                this.life = this.maxLife;
+                this.revivesLeft--; this.life = this.maxLife;
                 let safePlatforms = platforms.filter(p => p.y > 100 && p.y < GAME_HEIGHT - 200 && p.type !== TYPE.SPIKE);
                 let safeP = safePlatforms.length > 0 ? safePlatforms[0] : platforms[0];
-                this.x = safeP.x + safeP.width / 2;
-                this.y = safeP.y - 100;
-                this.vy = 0;
-                this.damageCooldown = 150; 
-            } else {
-                this.isDead = true;
-            }
+                this.x = safeP.x + safeP.width / 2; this.y = safeP.y - 100; this.vy = 0; this.damageCooldown = 150; 
+            } else { this.isDead = true; }
         }
     }
-    draw(ctx) {
-        drawFriendlyCharacter(ctx, this.x, this.y - this.height/2 + 4, this.charType, this.facingRight, this.animFrame, this.isDead, this.damageCooldown);
-    }
+    draw(ctx) { drawFriendlyCharacter(ctx, this.x, this.y - this.height/2 + 4, this.charType, this.facingRight, this.animFrame, this.isDead, this.damageCooldown); }
 }
 
 const p1 = new Player('1P', { left: 'ArrowLeft', right: 'ArrowRight', down: 'ArrowDown' }); 
@@ -300,8 +321,7 @@ const p2 = new Player('2P', { left: 'KeyA', right: 'KeyD', down: 'KeyS' });
 // 平台系統與精準機率
 // ==========================================
 function generatePlatformData() {
-    let type = TYPE.NORMAL; let items = [];
-    const baseRand = Math.random();
+    let type = TYPE.NORMAL; let items = []; const baseRand = Math.random();
     
     if (baseRand < 0.20) type = TYPE.SPIKE;
     else if (baseRand < 0.35) type = TYPE.BELT_LEFT;
@@ -310,23 +330,16 @@ function generatePlatformData() {
     if (type === TYPE.NORMAL || type === TYPE.BELT_LEFT || type === TYPE.BELT_RIGHT) {
         let itemRand = Math.random();
         if (itemRand < 0.25) {
-            type = TYPE.BONUS; 
-            const heartCount = Math.floor(Math.random() * 3) + 1; 
+            type = TYPE.BONUS; const heartCount = Math.floor(Math.random() * 3) + 1; 
             for(let i=0; i<heartCount; i++) items.push('heart');
-        } else if (itemRand >= 0.25 && itemRand < 0.28) {
-            type = TYPE.SPEED_UP; items.push('speedup');
-        } else if (itemRand >= 0.28 && itemRand < 0.38) {
-            type = TYPE.SPEED_DOWN; items.push('speeddown');
-        }
+        } else if (itemRand >= 0.25 && itemRand < 0.28) { type = TYPE.SPEED_UP; items.push('speedup'); } 
+        else if (itemRand >= 0.28 && itemRand < 0.38) { type = TYPE.SPEED_DOWN; items.push('speeddown'); }
     }
     return { type, items };
 }
 
 function createPlatform(y, isFirst = false) {
-    if (isFirst) {
-        platforms.push({ x: GAME_WIDTH / 2 - 120, y, width: 240, height: 28, type: TYPE.NORMAL, items: [] });
-        return;
-    }
+    if (isFirst) { platforms.push({ x: GAME_WIDTH / 2 - 120, y, width: 240, height: 28, type: TYPE.NORMAL, items: [] }); return; }
     const twoPlatforms = Math.random() < 0.4;
     if (twoPlatforms) {
         let w1 = 80 + Math.random() * 60; let x1 = Math.random() * (GAME_WIDTH / 2 - w1);
@@ -334,8 +347,7 @@ function createPlatform(y, isFirst = false) {
         let w2 = 80 + Math.random() * 60; let x2 = GAME_WIDTH / 2 + Math.random() * (GAME_WIDTH / 2 - w2);
         let data2 = generatePlatformData(); platforms.push({ x: x2, y, width: w2, height: 28, type: data2.type, items: data2.items });
     } else {
-        let w = 150 + Math.random() * 100;
-        let prevP = platforms[platforms.length - 1];
+        let w = 150 + Math.random() * 100; let prevP = platforms[platforms.length - 1];
         let minX = Math.max(0, prevP.x - w + 40); let maxX = Math.min(GAME_WIDTH - w, prevP.x + prevP.width - 40);
         if (maxX < minX) { minX = 0; maxX = GAME_WIDTH - w; } 
         let x = minX + Math.random() * (maxX - minX);
@@ -344,9 +356,7 @@ function createPlatform(y, isFirst = false) {
 }
 
 function initPlatforms() {
-    platforms = []; 
-    createPlatform(300, true);
-    let currentY = 300;
+    platforms = []; createPlatform(300, true); let currentY = 300;
     for (let i = 1; i < 7; i++) { currentY += CONFIG.GAP_DISTANCE; createPlatform(currentY); }
 }
 
@@ -367,17 +377,14 @@ function checkGameOver() {
 
 function update() {
     if (gameState !== STATE.PLAYING) return;
-    p1.update(); if (gameMode === 2) p2.update();
-    checkGameOver();
+    p1.update(); if (gameMode === 2) p2.update(); checkGameOver();
 
     platforms.forEach(p => p.y -= currentPlatformSpeed);
 
     if (platforms.length > 0 && platforms[0].y < -50) {
         platforms.shift(); floorCount++;
-        
-        // 【修改】每 10 層觸發自動加速，一次增加 1.5 
         if (floorCount % 10 === 0 && currentPlatformSpeed < CONFIG.MAX_SPEED) {
-            currentPlatformSpeed = Math.min(CONFIG.MAX_SPEED, currentPlatformSpeed + 1.5);
+            currentPlatformSpeed = Math.min(CONFIG.MAX_SPEED, currentPlatformSpeed + 0.2);
         }
     }
 
@@ -423,9 +430,6 @@ function update() {
     bgOffsetY = (bgOffsetY + currentPlatformSpeed * 0.2) % 40;
 }
 
-// ==========================================
-// 繪圖引擎
-// ==========================================
 function drawBackground() {
     ctx.fillStyle = '#f8fafc'; ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
     ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 2; ctx.beginPath();
@@ -438,15 +442,13 @@ function drawPlatforms() {
     const timeOffset = Date.now() / 150;
     platforms.forEach(p => {
         drawPremiumPlatform(ctx, p.x, p.y, p.width, p.height, p.type, timeOffset);
-
         if (p.type === TYPE.SPIKE) drawSpikes(ctx, p.x, p.y, p.width);
         
         if (p.items && p.items.length > 0) {
             let heartRendered = 0;
             p.items.forEach((item) => {
                 if (item === 'heart') {
-                    const spacing = 35;
-                    const totalHearts = p.items.filter(i => i==='heart').length;
+                    const spacing = 35; const totalHearts = p.items.filter(i => i==='heart').length;
                     const startX = (p.x + p.width/2) - ((totalHearts-1) * spacing / 2);
                     drawPixelHeart(ctx, startX + (heartRendered * spacing), p.y - 20, 1.2, true); heartRendered++;
                 } else if (item === 'speedup') { drawSpeedArrows(ctx, p.x + p.width/2, p.y + p.height/2, TYPE.SPEED_UP); } 
@@ -460,50 +462,41 @@ function drawPlatforms() {
 function drawHUD() {
     if (gameState === STATE.START) return;
     
-    const panelGrad = ctx.createLinearGradient(20, 20, 20, 100);
+    const panelGrad = ctx.createLinearGradient(15, 15, 15, 95);
     panelGrad.addColorStop(0, '#f8fafc'); panelGrad.addColorStop(0.5, '#e2e8f0'); panelGrad.addColorStop(1, '#cbd5e1');
     ctx.fillStyle = panelGrad; ctx.shadowColor = 'rgba(0,0,0,0.15)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 4;
-    ctx.beginPath(); ctx.roundRect(20, 20, 250, 80, 8); ctx.fill(); ctx.shadowColor = 'transparent';
+    ctx.beginPath(); ctx.roundRect(15, 15, 300, 80, 8); ctx.fill(); ctx.shadowColor = 'transparent';
     ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 2; ctx.stroke();
 
-    const drawLife = (player, x, y, label) => {
+    const drawLife = (player, baseX, baseY) => {
         if(player.isDead) return;
-        ctx.save(); ctx.translate(x + 35, y + 40); ctx.scale(0.8, 0.8); 
+        for (let i = 0; i < 4; i++) { drawPixelHeart(ctx, baseX + 15 + (i * 26), baseY + 15, 1.0, player.life >= (i+1)*2); }
+        ctx.save(); ctx.translate(baseX + 15, baseY + 50); ctx.scale(0.6, 0.6); 
         drawFriendlyCharacter(ctx, 0, 0, player.charType, true, 0, false, 0); ctx.restore();
-        
-        ctx.fillStyle = '#2f3542'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'left'; 
-        ctx.fillText(label, x + 50, y + 30);
-        
-        ctx.fillStyle = '#e67e22'; ctx.font = 'bold 14px Arial';
-        ctx.fillText(`👼 復活: ${player.revivesLeft}`, x + 150, y + 30);
-
-        for (let i = 0; i < 4; i++) drawPixelHeart(ctx, x + 30 + (i * 22), y - 5, 0.9, player.life >= (i+1)*2);
+        ctx.fillStyle = '#2f3542'; ctx.font = 'bold 18px Arial'; ctx.textAlign = 'left'; ctx.fillText(player.id, baseX + 35, baseY + 55);
+        ctx.fillStyle = '#e67e22'; ctx.font = 'bold 14px Arial'; ctx.fillText(`👼 x${player.revivesLeft}`, baseX + 75, baseY + 53);
     };
-    drawLife(p1, 20, 40, '1P'); if(gameMode === 2) drawLife(p2, 130, 40, '2P');
+    
+    drawLife(p1, 20, 20); if(gameMode === 2) drawLife(p2, 160, 20);
 
     ctx.fillStyle = '#2f3542'; ctx.font = 'bold 36px "Orbitron", monospace'; ctx.textAlign = 'left';
-    ctx.fillText(`第 ${String(floorCount).padStart(4, '0')} 層`, 290, 70);
-    ctx.strokeStyle = '#cbd5e1'; ctx.beginPath(); ctx.moveTo(290, 85); ctx.lineTo(490, 85); ctx.stroke();
-    
+    ctx.fillText(`第 ${String(floorCount).padStart(4, '0')} 層`, 330, 55);
+    ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(330, 70); ctx.lineTo(580, 70); ctx.stroke();
     ctx.fillStyle = '#e1b12c'; ctx.font = 'bold 16px Arial';
-    ctx.fillText(`SPEED: ${currentPlatformSpeed.toFixed(1)}`, 290, 110);
+    ctx.fillText(`SPEED: ${currentPlatformSpeed.toFixed(1)}`, 330, 90);
 }
 
 function drawUI() {
     if (gameState === STATE.START) {
         ctx.fillStyle = 'rgba(248, 250, 252, 0.95)'; ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-        ctx.fillStyle = '#2d3436'; ctx.textAlign = 'center'; ctx.font = 'bold 50px Arial'; 
-        ctx.fillText('瘋狂下樓梯', GAME_WIDTH / 2, 140);
+        ctx.fillStyle = '#2d3436'; ctx.textAlign = 'center'; ctx.font = 'bold 50px Arial'; ctx.fillText('瘋狂下樓梯', GAME_WIDTH / 2, 140);
         ctx.fillStyle = '#64748b'; ctx.font = 'bold 18px Arial'; ctx.fillText('請使用滑鼠點擊選擇對戰編組', GAME_WIDTH / 2, 190);
 
         const drawBtn = (id, label, x, y, mode, isP2) => {
             const sel = selectedSetup === mode;
-            ctx.fillStyle = sel ? (isP2 ? '#f39c12' : '#0984e3') : '#ffffff';
-            ctx.strokeStyle = sel ? '#2d3436' : '#cbd5e1'; ctx.lineWidth = 2.5;
+            ctx.fillStyle = sel ? (isP2 ? '#f39c12' : '#0984e3') : '#ffffff'; ctx.strokeStyle = sel ? '#2d3436' : '#cbd5e1'; ctx.lineWidth = 2.5;
             ctx.beginPath(); ctx.roundRect(x, y, 250, 75, 10); ctx.fill(); ctx.stroke();
-            ctx.fillStyle = sel ? '#ffffff' : '#2d3436'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'left';
-            ctx.fillText(`按鍵 ${id} : ${label}`, x + 15, y + 30);
-
+            ctx.fillStyle = sel ? '#ffffff' : '#2d3436'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'left'; ctx.fillText(`按鍵 ${id} : ${label}`, x + 15, y + 30);
             ctx.save(); ctx.translate(x + 180, y + 35); ctx.scale(0.6, 0.6); 
             if (mode === MODES.P1_MALE) drawFriendlyCharacter(ctx, 0, 0, CHAR_TYPES.MALE_1, true, 0, false, 0);
             else if (mode === MODES.P1_FEMALE) drawFriendlyCharacter(ctx, 0, 0, CHAR_TYPES.FEMALE_1, true, 0, false, 0);
@@ -540,8 +533,7 @@ function drawUI() {
 
     if (gameState === STATE.LEADERBOARD) {
         ctx.fillStyle = '#0f172a'; ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-        ctx.fillStyle = '#38bdf8'; ctx.textAlign = 'center'; ctx.font = 'bold 40px Arial'; 
-        ctx.fillText('🏆 TOP 10 排行榜', GAME_WIDTH / 2, 80);
+        ctx.fillStyle = '#38bdf8'; ctx.textAlign = 'center'; ctx.font = 'bold 40px Arial'; ctx.fillText('🏆 TOP 10 排行榜', GAME_WIDTH / 2, 80);
 
         const lb = getLeaderboard();
         ctx.fillStyle = '#94a3b8'; ctx.font = 'bold 18px Arial'; ctx.textAlign = 'left'; 
@@ -563,15 +555,16 @@ function drawUI() {
 }
 
 window.addEventListener('keydown', (e) => {
+    if(["Space","ArrowUp","ArrowDown"].indexOf(e.code) > -1) e.preventDefault();
     keys[e.code] = true;
-    if (e.code === 'Space') { if (gameState === STATE.PLAYING) gameState = STATE.PAUSED; else if (gameState === STATE.PAUSED) gameState = STATE.PLAYING; e.preventDefault(); }
+    if (e.code === 'Space') { if (gameState === STATE.PLAYING) gameState = STATE.PAUSED; else if (gameState === STATE.PAUSED) gameState = STATE.PLAYING; }
     if (gameState === STATE.START) {
         if (e.code === 'Digit1') selectedSetup = MODES.P1_MALE; if (e.code === 'Digit2') selectedSetup = MODES.P1_FEMALE;
         if (e.code === 'Digit3') selectedSetup = MODES.P2_MALE_FEMALE; if (e.code === 'Digit4') selectedSetup = MODES.P2_MALE_MALE;
         if (e.code === 'Digit5') selectedSetup = MODES.P2_FEMALE_FEMALE; if (e.code === 'Digit6') selectedSetup = MODES.P2_FEMALE_MALE;
         if (e.code === 'Enter') startGame();
     } else if (gameState === STATE.LEADERBOARD && e.code === 'Enter') gameState = STATE.START;
-});
+}, { passive: false });
 window.addEventListener('keyup', (e) => keys[e.code] = false);
 
 canvas.addEventListener('mousedown', (e) => {
