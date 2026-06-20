@@ -1,0 +1,32 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    /* 現代 AI 科技感的深藍灰色輻射漸層 */
+    background: radial-gradient(circle at 50% 0%, #1e293b, #0f172a);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: 'Fredoka One', 'Orbitron', Arial, sans-serif;
+    overflow: hidden;
+}
+
+#canvas-container {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 12px;
+    /* 現代科技感：深層陰影 + 微弱的科技藍邊緣發光 */
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 25px rgba(56, 189, 248, 0.15);
+}
+
+canvas {
+    border-radius: 12px;
+    cursor: default;
+}
