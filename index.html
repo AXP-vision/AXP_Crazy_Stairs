@@ -3,12 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AXP 視覺訓練模擬器</title>
     
-    <title>瘋狂下樓梯 - AXP 完美復刻版</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap" rel="stylesheet">
     
-    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Orbitron:wght@700&display=swap" rel="stylesheet">
-    
-    <link rel="stylesheet" href="style.css">
+    <style>
+        /* 讓畫布完美置中、消除預設邊距 */
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            /* 背景用深色襯托遊戲畫面，讓它看起來像個獨立的遊戲機 */
+            background-color: #0f172a; 
+            overflow: hidden; /* 防止視窗出現醜醜的捲軸 */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            /* 讓使用者點擊按鈕時，不會不小心選取到網頁文字 */
+            user-select: none; 
+            -webkit-user-select: none;
+        }
+
+        #canvas-container {
+            /* 容器大小交由 app.js 的 resizeCanvas 自動計算比例 */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            /* 🌟 給遊戲機外框增加一點頂級質感：圓角與深色陰影 */
+            border-radius: 12px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.6);
+        }
+    </style>
 </head>
 <body>
 
