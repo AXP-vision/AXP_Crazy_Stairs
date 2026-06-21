@@ -1,4 +1,4 @@
-// app.js - AXP Clinical Deluxe: Custom UI Modal & Supabase Integration
+// app.js - AXP Clinical Deluxe: Enter Key Fix & Clean DOM
 
 // ==========================================
 // 🛡️ AXP 商業防護與設定
@@ -13,11 +13,12 @@ if (!allowedDomains.includes(window.location.hostname) && window.location.hostna
 // ==========================================
 // ☁️ Supabase 雲端資料庫初始化
 // ==========================================
-const SUPABASE_URL = 'https://wvholwcyrldixlsgoege.supabase.co'; // 例如：'https://xxxx.supabase.co'
-const SUPABASE_ANON_KEY = 'sb_publishable_BozJ84tPQF-jBHGKtXKqgw_ELodM54e'; // 一大串英數字
+const SUPABASE_URL = 'https://wvholwcyrldixlsgoege.supabase.co'; 
+// 👇 🚨 請將下方字串換成你的 sb_publishable_... 金鑰！
+const SUPABASE_ANON_KEY = 'sb_publishable_BozJ84tPQF-jBHGKtXKqgw_ELodM54e'; 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-let globalLeaderboardData = []; // 暫存雲端抓下來的排行榜
+let globalLeaderboardData = []; 
 
 let canvas, ctx, container;
 const GAME_WIDTH = 600;
@@ -31,7 +32,7 @@ function setupCanvas() {
         document.body.appendChild(container);
     }
     container.innerHTML = ''; 
-    container.style.position = 'relative'; // 🌟 為了讓自訂 UI 面板能完美重疊在遊戲上
+    container.style.position = 'relative'; 
 
     canvas = document.createElement('canvas');
     ctx = canvas.getContext('2d');
@@ -272,19 +273,19 @@ async function fetchLeaderboardData() {
             .select('*')
             .order('floors', { ascending: false })
             .limit(10);
+        if (error) throw error;
         if (data) globalLeaderboardData = data;
     } catch (err) {
         console.error("無法取得雲端排行榜:", err);
     }
 }
 
-// 🌟 終極解法：自訂 HTML 名字輸入面板 (解決 iframe 被擋彈出視窗的問題)
+// 🌟 自訂 HTML 名字輸入面板 
 function showNameInputModal() {
     let modal = document.getElementById('axp-name-modal');
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'axp-name-modal';
-        // 絕對置中、漂浮在畫布上的漂亮 UI
         modal.style.cssText = 'position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(255,255,255,0.95); padding:30px; border-radius:16px; box-shadow:0 15px 40px rgba(0,0,0,0.4); text-align:center; z-index:100; width:80%; max-width:320px; font-family:Arial;';
         
         modal.innerHTML = `
@@ -296,9 +297,17 @@ function showNameInputModal() {
         `;
         container.appendChild(modal);
         
+        // 🌟 修正：讓輸入框可以監聽 Enter 鍵並觸發按鈕點擊
+        document.getElementById('axp-agent-name').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('axp-submit-score').click();
+            }
+        });
+
         document.getElementById('axp-submit-score').addEventListener('click', async () => {
             const btn = document.getElementById('axp-submit-score');
-            btn.innerText = '📡 成績上傳中...';
+            btn.innerText = '📡 上傳中...';
             btn.style.background = '#95a5a6';
             btn.disabled = true;
 
@@ -307,23 +316,24 @@ function showNameInputModal() {
             const dateStr = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getDate().toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
             
             try {
-                // 上傳並重新抓取排行榜
-                await supabaseClient.from('leaderboard').insert([{ name: name, floors: floorCount, date: dateStr }]);
-                await fetchLeaderboardData();
+                const { error } = await supabaseClient.from('leaderboard').insert([{ name: name, floors: floorCount, date: dateStr }]);
+                if (error) throw error; 
+                
+                await fetchLeaderboardData(); 
+                
+                // 🌟 修正：直接把 modal DOM 元素拔掉 (remove)，徹底清除阻擋，讓排行榜的 Enter 鍵順利復活
+                modal.remove();
+                gameState = STATE.LEADERBOARD;
+
             } catch (err) {
                 console.error('上傳失敗', err);
+                alert("⚠️ 上傳失敗！請檢查金鑰 (anon_key) 是否貼錯。\n錯誤詳情：" + (err.message || JSON.stringify(err)));
+                btn.innerText = '重新送出';
+                btn.style.background = '#e74c3c';
+                btn.disabled = false;
             }
-            
-            // 恢復 UI 狀態並跳轉
-            modal.style.display = 'none';
-            btn.innerText = '送出成績';
-            btn.style.background = '#2980b9';
-            btn.disabled = false;
-            
-            gameState = STATE.LEADERBOARD;
         });
     }
-    modal.style.display = 'block';
     document.getElementById('axp-agent-name').focus();
 }
 
@@ -338,7 +348,6 @@ async function checkGameOver() {
             let lowestScore = globalLeaderboardData.length === 10 ? globalLeaderboardData[9].floors : 0;
             
             if (globalLeaderboardData.length < 10 || floorCount > lowestScore) { 
-                // 🚀 呼叫我們自製的無敵 HTML 輸入框
                 showNameInputModal();
             } else {
                 gameState = STATE.LEADERBOARD;
@@ -569,7 +578,7 @@ function drawGameState() {
 // 🖱️ 操控與事件監聽
 // ==========================================
 window.addEventListener('keydown', (e) => {
-    // 🌟 防止玩家在輸入名字時，按鍵觸發遊戲功能
+    // 🌟 修正：如果是打字狀態，放行所有預設行為，讓原生的 Enter 事件能被觸發
     if (e.target.tagName === 'INPUT') return; 
 
     if(["Space","ArrowUp","ArrowDown"].indexOf(e.code) > -1) e.preventDefault();
