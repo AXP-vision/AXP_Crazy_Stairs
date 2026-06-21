@@ -1,9 +1,9 @@
-// app.js - AXP Clinical Deluxe: Global Supabase Leaderboard Integration
+// app.js - AXP Clinical Deluxe: Custom UI Modal & Supabase Integration
 
 // ==========================================
 // 🛡️ AXP 商業防護與設定
 // ==========================================
-const allowedDomains = ["localhost", "127.0.0.1", "axp-vision.github.io", "rabbit-turtle-m792.squarespace.com", ""];
+const allowedDomains = ["localhost", "127.0.0.1", "axp-vision.github.io", "rabbit-turtle-m792.squarespace.com", "www.fantastic-vision.com", "fantastic-vision.com", ""];
 
 if (!allowedDomains.includes(window.location.hostname) && window.location.hostname !== "") {
     document.body.innerHTML = `<h2 style="color:#e74c3c; text-align:center; margin-top:20vh; font-family:Arial;">⚠️ 未經授權的使用</h2>`;
@@ -11,7 +11,7 @@ if (!allowedDomains.includes(window.location.hostname) && window.location.hostna
 }
 
 // ==========================================
-// ☁️ Supabase 雲端資料庫初始化 (請填入你的金鑰)
+// ☁️ Supabase 雲端資料庫初始化
 // ==========================================
 const SUPABASE_URL = 'https://wvholwcyrldixlsgoege.supabase.co'; // 例如：'https://xxxx.supabase.co'
 const SUPABASE_ANON_KEY = 'sb_publishable_BozJ84tPQF-jBHGKtXKqgw_ELodM54e'; // 一大串英數字
@@ -31,6 +31,8 @@ function setupCanvas() {
         document.body.appendChild(container);
     }
     container.innerHTML = ''; 
+    container.style.position = 'relative'; // 🌟 為了讓自訂 UI 面板能完美重疊在遊戲上
+
     canvas = document.createElement('canvas');
     ctx = canvas.getContext('2d');
     container.appendChild(canvas);
@@ -276,30 +278,71 @@ async function fetchLeaderboardData() {
     }
 }
 
-// 🌟 非同步遊戲結束邏輯 (上傳與下載成績)
+// 🌟 終極解法：自訂 HTML 名字輸入面板 (解決 iframe 被擋彈出視窗的問題)
+function showNameInputModal() {
+    let modal = document.getElementById('axp-name-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'axp-name-modal';
+        // 絕對置中、漂浮在畫布上的漂亮 UI
+        modal.style.cssText = 'position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:rgba(255,255,255,0.95); padding:30px; border-radius:16px; box-shadow:0 15px 40px rgba(0,0,0,0.4); text-align:center; z-index:100; width:80%; max-width:320px; font-family:Arial;';
+        
+        modal.innerHTML = `
+            <h3 style="margin:0 0 10px 0; color:#2d3436; font-size:24px;">🎉 破紀錄啦！</h3>
+            <p style="margin:0 0 15px 0; color:#64748b; font-size:16px;">請輸入你的特工代號（最多8字）：</p>
+            <input type="text" id="axp-agent-name" value="特工" maxlength="8" style="width:80%; padding:12px; font-size:18px; border:2px solid #cbd5e1; border-radius:8px; margin-bottom:20px; text-align:center; outline:none; font-weight:bold; color:#2d3436; background:#f8fafc;">
+            <br>
+            <button id="axp-submit-score" style="background:#2980b9; color:white; border:none; padding:12px 25px; font-size:18px; border-radius:8px; cursor:pointer; font-weight:bold; width:100%; transition: background 0.2s;">送出成績</button>
+        `;
+        container.appendChild(modal);
+        
+        document.getElementById('axp-submit-score').addEventListener('click', async () => {
+            const btn = document.getElementById('axp-submit-score');
+            btn.innerText = '📡 成績上傳中...';
+            btn.style.background = '#95a5a6';
+            btn.disabled = true;
+
+            const name = document.getElementById('axp-agent-name').value || '特工';
+            const now = new Date();
+            const dateStr = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getDate().toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+            
+            try {
+                // 上傳並重新抓取排行榜
+                await supabaseClient.from('leaderboard').insert([{ name: name, floors: floorCount, date: dateStr }]);
+                await fetchLeaderboardData();
+            } catch (err) {
+                console.error('上傳失敗', err);
+            }
+            
+            // 恢復 UI 狀態並跳轉
+            modal.style.display = 'none';
+            btn.innerText = '送出成績';
+            btn.style.background = '#2980b9';
+            btn.disabled = false;
+            
+            gameState = STATE.LEADERBOARD;
+        });
+    }
+    modal.style.display = 'block';
+    document.getElementById('axp-agent-name').focus();
+}
+
+// 🌟 非同步遊戲結束邏輯
 async function checkGameOver() {
     if (gameState !== STATE.PLAYING) return;
     if ((gameMode === 1 && p1.isDead) || (gameMode === 2 && p1.isDead && p2.isDead)) {
         gameState = STATE.GAMEOVER;
         
-        // 使用 setTimeout 讓玩家看到 GAMEOVER 畫面 0.8 秒後再觸發排行榜
         setTimeout(async () => {
-            // 先獲取一次當前排行榜來比對是否破紀錄
             await fetchLeaderboardData();
             let lowestScore = globalLeaderboardData.length === 10 ? globalLeaderboardData[9].floors : 0;
             
             if (globalLeaderboardData.length < 10 || floorCount > lowestScore) { 
-                const name = prompt("🎉 破紀錄啦！請輸入你的大名：", "特工"); 
-                if (name) {
-                    const now = new Date();
-                    const dateStr = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getDate().toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
-                    // 寫入雲端資料庫
-                    await supabaseClient.from('leaderboard').insert([{ name: name, floors: floorCount, date: dateStr }]);
-                    // 重新獲取最新排行榜
-                    await fetchLeaderboardData();
-                }
+                // 🚀 呼叫我們自製的無敵 HTML 輸入框
+                showNameInputModal();
+            } else {
+                gameState = STATE.LEADERBOARD;
             }
-            gameState = STATE.LEADERBOARD;
         }, 800);
     }
 }
@@ -508,7 +551,6 @@ function drawGameState() {
         
         ctx.fillStyle = '#94a3b8'; ctx.font = 'bold 18px Arial'; ctx.textAlign = 'left'; ctx.fillText('排名', 60, 140); ctx.fillText('代號', 130, 140); ctx.fillText('樓層', 320, 140); ctx.fillText('時間', 420, 140); ctx.strokeStyle = '#334155'; ctx.beginPath(); ctx.moveTo(50, 150); ctx.lineTo(550, 150); ctx.stroke(); ctx.font = '18px Arial';
         
-        // 🌟 使用從雲端讀取的 globalLeaderboardData
         globalLeaderboardData.forEach((entry, i) => { 
             const y = 190 + i * 40; 
             ctx.fillStyle = i < 3 ? '#fbbf24' : '#cbd5e1'; 
@@ -527,6 +569,9 @@ function drawGameState() {
 // 🖱️ 操控與事件監聽
 // ==========================================
 window.addEventListener('keydown', (e) => {
+    // 🌟 防止玩家在輸入名字時，按鍵觸發遊戲功能
+    if (e.target.tagName === 'INPUT') return; 
+
     if(["Space","ArrowUp","ArrowDown"].indexOf(e.code) > -1) e.preventDefault();
     keys[e.code] = true;
     if (e.code === 'Space') { if (gameState === STATE.PLAYING) gameState = STATE.PAUSED; else if (gameState === STATE.PAUSED) gameState = STATE.PLAYING; }
@@ -612,10 +657,7 @@ function bootGame() {
     bindMouseEvents();      
     initGameAssets().then(() => { 
         initPlatforms(); 
-        // 在遊戲載入時先抓一次雲端排行榜，確保待會顯示有資料
-        fetchLeaderboardData().then(() => {
-            gameLoop();         
-        });
+        fetchLeaderboardData().then(() => { gameLoop(); });
     });
 }
 
