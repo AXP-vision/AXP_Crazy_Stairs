@@ -1,4 +1,4 @@
-// app.js - AXP Final Commercial Edition: Premium Illustrated Character Visuals
+// app.js - AXP Final Commercial Edition: Premium Illustrated Character Visuals + Air Inertia Control
 
 // ==========================================
 // 🛡️ AXP 商業防護：網域鎖定 (防盜連)
@@ -76,10 +76,11 @@ const CONFIG = {
 
 let currentPlatformSpeed = CONFIG.START_SPEED;
 
+// 🌟 修改點 1：物理極限提升，增加電競靈活度
 const GRAVITY = 0.4;
 const MAX_FALL_SPEED = 9.0;
-const MAX_MOVE_SPEED = 5.0; 
-const MOVE_ACCEL = 1.0; 
+const MAX_MOVE_SPEED = 5.0;  // 提高橫向極速 
+const MOVE_ACCEL = 1.5;      // 提高按鍵爆發力 (原本 1.0)
 const FRICTION = 0.85;
 
 let floorCount = 1;
@@ -191,7 +192,7 @@ function drawFriendlyCharacter(ctx, x, y, charType, facingRight, animFrame, isDe
         ctx.beginPath(); ctx.arc(-14, -12, 6, 0, Math.PI*2); ctx.fill(); 
         ctx.save(); ctx.translate(-14, -12); ctx.rotate(Math.sin(animFrame) * 0.3 + 0.2); // 馬尾跟著節奏甩動
         ctx.beginPath(); ctx.ellipse(-6, 8, 4, 14, -0.3, 0, Math.PI*2); ctx.fill(); ctx.restore();
-    } else if (p.style === 'girl_pony_uniform') { // Variant? Let's just make it same for now.
+    } else if (p.style === 'girl_pony_uniform') { 
         ctx.beginPath(); ctx.roundRect(-13, -22, 26, 10, 4); ctx.fill();
         ctx.fillRect(-13, -12, 7, 12); 
         ctx.fillRect(8, -12, 5, 8); 
@@ -314,7 +315,7 @@ class Player {
         
         if (keys[this.controls.left]) this.vx -= MOVE_ACCEL;
         else if (keys[this.controls.right]) this.vx += MOVE_ACCEL;
-        else this.vx = 0; 
+        else this.vx *= FRICTION; // 🌟 修改點 2：把 this.vx = 0 換成摩擦力衰減，創造滯空滑行感
 
         if (this.vx > MAX_MOVE_SPEED) this.vx = MAX_MOVE_SPEED;
         if (this.vx < -MAX_MOVE_SPEED) this.vx = -MAX_MOVE_SPEED;
