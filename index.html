@@ -14,15 +14,17 @@
             padding: 0;
             width: 100%;
             height: 100%;
-            /* 背景用深色襯托遊戲畫面，讓它看起來像個獨立的遊戲機 */
-            background-color: #0f172a; 
+            background-color: #0f172a; /* 襯托遊戲畫面的深色背景 */
             overflow: hidden; /* 防止視窗出現醜醜的捲軸 */
             display: flex;
             justify-content: center;
             align-items: center;
-            /* 讓使用者點擊按鈕時，不會不小心選取到網頁文字 */
+            
+            /* 🌟 強制全域禁止文字反白選取 */
             user-select: none; 
             -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
         }
 
         #canvas-container {
@@ -38,8 +40,26 @@
             box-shadow: 0 15px 35px rgba(0,0,0,0.6);
         }
     </style>
+
+    <script>
+        // 🌟 商業防護 1：完全鎖定滑鼠右鍵選單
+        document.addEventListener('contextmenu', event => event.preventDefault());
+
+        // 🌟 商業防護 2：鎖定常見的開發者看扣快捷鍵 (F12, Ctrl+Shift+I, Ctrl+U 等)
+        document.onkeydown = function(e) {
+            // 擋掉 F12
+            if (e.keyCode == 123) { return false; } 
+            // 擋掉 Ctrl+Shift+I (Windows) / Cmd+Option+I (Mac)
+            if (e.ctrlKey && e.shiftKey && e.keyCode == 73) { return false; } 
+            // 擋掉 Ctrl+U (Windows) / Cmd+Option+U (Mac) - 檢視網頁原始碼
+            if (e.ctrlKey && e.keyCode == 85) { return false; } 
+            // 擋掉 Cmd+Option+C (Mac) - 另一種開啟開發者工具的方式
+            if (e.metaKey && e.altKey && e.keyCode == 67) { return false; }
+        };
+    </script>
 </head>
-<body>
+
+<body oncontextmenu="return false;" onselectstart="return false;" ondragstart="return false;">
 
     <div id="canvas-container"></div>
 
