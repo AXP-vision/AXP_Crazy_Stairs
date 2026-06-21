@@ -1,4 +1,4 @@
-// app.js - AXP Final Edition: 4-Character Selection & Dual-Engine Sprite Parser
+// app.js - AXP Final Edition: 4-Character Smart Cropping & Layered UI
 
 // ==========================================
 // 🛡️ AXP 商業防護：網域鎖定 (防盜連)
@@ -39,7 +39,7 @@ window.addEventListener('resize', resizeCanvas);
 resizeCanvas(); 
 
 // ==========================================
-// 📦 遊戲資產管理 (升級：載入 4 張角色全身圖)
+// 📦 遊戲資產管理 (精簡化：只讀取 4 張全身圖)
 // ==========================================
 const assets = {};
 
@@ -74,10 +74,19 @@ const initGameAssets = () => {
 };
 
 // ==========================================
-// ⚙️ Core System & 排行榜
+// ⚙️ Core System & 狀態管理
 // ==========================================
 const STATE = { START: 0, PLAYING: 1, PAUSED: 2, GAMEOVER: 3, LEADERBOARD: 4 };
 let gameState = STATE.START;
+
+// 🌟 UI 分頁與選擇狀態
+let isTwoPlayer = false;
+let sel1P = 1; // 1: 貓影, 2: 灰髮, 3: 緋紅, 4: 藍髮
+let sel2P = 5; // 5: 貓影+灰髮, 6: 緋紅+藍髮, 7: 雙女(貓+緋), 8: 雙男(灰+藍)
+let gameMode = 1; 
+
+let p1CharType = 'sprite_female1';
+let p2CharType = 'sprite_male1';
 
 function getLeaderboard() {
     try { return JSON.parse(localStorage.getItem('AXP_Leaderboard')) || []; } 
@@ -94,14 +103,6 @@ function saveToLeaderboard(name, floors) {
     try { localStorage.setItem('AXP_Leaderboard', JSON.stringify(lb)); } 
     catch (e) { console.warn("無法儲存排行榜資料"); }
 }
-
-// 🌟 升級：擴充對戰陣容與機制 (4個獨立選單模式)
-const MODES = { 
-    P1_FEMALE1: 1, P1_FEMALE2: 2, P1_MALE1: 3, P1_MALE2: 4,
-    P2_F1_M1: 5, P2_F2_M2: 6, P2_F1_F2: 7, P2_M1_M2: 8
-};
-let selectedSetup = MODES.P1_FEMALE1; 
-let gameMode = 1; 
 
 const CONFIG = { START_SPEED: 1.5, MAX_SPEED: 4.0, SPEED_STEP: 0.2, GAP_DISTANCE: 165 };
 let currentPlatformSpeed = CONFIG.START_SPEED;
@@ -124,41 +125,45 @@ function drawPixelHeart(ctx, x, y, size, isFull) {
     ctx.restore();
 }
 
-// 🌟 智能進化：多網格全自動精靈圖動態解析引擎
+// 🌟 動態解析與尺寸補正引擎
 function drawFriendlyCharacter(ctx, x, y, spriteKey, facingRight, animFrame, isDead, damageCooldown) {
     if (isDead || (damageCooldown > 0 && Math.floor(Date.now() / 50) % 2 === 0)) return;
     const img = assets[spriteKey];
     if (!img) return; 
 
     ctx.save(); ctx.translate(x, y); 
-    
-    // 動態陰影
     ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.beginPath(); ctx.ellipse(0, 20, 14, 4, 0, 0, Math.PI*2); ctx.fill();
 
-    let fw, fh, sx, sy, numFrames, yOffset, scaleX = 1;
-
-    // 🌟 全自動規格偵測邏輯
-    // 依據圖片的長寬比例，自動辨識是 4x4 的女僕格式還是 9x6 的西裝特工格式
+    let fw, fh, sx, sy, numFrames, yOffset = 0, scaleMultiplier = 1, scaleX = 1;
     const is9x6Format = (img.width / img.height) > 1.2;
 
     if (!is9x6Format) {
-        // 4x4 網格格式 (女僕系列)
+        // 女角 4x4 格式
         fw = img.width / 4; fh = img.height / 4; numFrames = 4;
         const fIdx = Math.floor(animFrame / 15) % numFrames;
-        sx = fIdx * fw; sy = 2 * fh; // 第三排向右跑步
-        yOffset = -5; 
+        sx = fIdx * fw; sy = 2 * fh; 
+        
+        yOffset = -5; // 浮空補正
+        scaleMultiplier = 1.2; // 放大補正
+        
         if (!facingRight) scaleX = -1;
     } else {
-        // 9x6 網格格式 (西裝男系列)
+        // 男角 9x6 格式
         fw = img.width / 9; fh = img.height / 6; numFrames = 3;
         const fIdx = Math.floor(animFrame / 15) % numFrames;
-        sx = fIdx * fw; sy = 0 * fh; // 第一排跑步
-        yOffset = -12; 
-        scaleX = facingRight ? -1 : 1; // 修正西裝男反向原圖問題
+        sx = fIdx * fw; sy = 0 * fh; 
+        
+        yOffset = -12; // 浮空補正
+        scaleX = facingRight ? -1 : 1; 
     }
 
     ctx.scale(scaleX, 1);
-    const playerWidth = 48; const playerHeight = 48; const dx = -playerWidth / 2; const dy = -playerHeight / 2 + yOffset; 
+    const baseWidth = 32; const baseHeight = 48;
+    const playerWidth = baseWidth * scaleMultiplier;
+    const playerHeight = baseHeight * scaleMultiplier;
+    const dx = -playerWidth / 2;
+    const dy = -playerHeight / 2 + yOffset; 
+    
     ctx.imageSmoothingEnabled = false; 
     ctx.drawImage(img, sx, sy, fw, fh, dx, dy, playerWidth, playerHeight);
     ctx.restore();
@@ -196,18 +201,7 @@ class Player {
         if (fullReset) this.revivesLeft = 3; 
         this.x = (gameMode === 1 && this.id === '1P') ? GAME_WIDTH / 2 : this.startX;
         this.y = 100; this.vx = 0; this.vy = 0; this.life = 8; this.maxLife = 8; this.isDead = false; this.damageCooldown = 150; this.facingRight = true; this.animFrame = 0;
-        
-        // 🌟 核心分流：根據選單決定的代號指定對應的 4 大圖檔
-        if (this.id === '1P') {
-            if (selectedSetup === MODES.P1_FEMALE1 || selectedSetup === MODES.P2_F1_M1 || selectedSetup === MODES.P2_F1_F2) this.spriteKey = 'sprite_female1';
-            else if (selectedSetup === MODES.P1_FEMALE2 || selectedSetup === MODES.P2_F2_M2) this.spriteKey = 'sprite_female2';
-            else if (selectedSetup === MODES.P1_MALE1 || selectedSetup === MODES.P2_M1_M2) this.spriteKey = 'sprite_male1';
-            else this.spriteKey = 'sprite_male2';
-        } else {
-            if (selectedSetup === MODES.P2_F1_M1 || selectedSetup === MODES.P2_M1_M2) this.spriteKey = 'sprite_male1';
-            else if (selectedSetup === MODES.P2_F2_M2) this.spriteKey = 'sprite_male2';
-            else this.spriteKey = 'sprite_female2'; // P2_F1_F2 模式
-        }
+        this.spriteKey = this.id === '1P' ? p1CharType : p2CharType;
     }
     update() {
         if (this.isDead) return;
@@ -275,7 +269,7 @@ function update() {
 function drawBackground() { ctx.fillStyle = '#f8fafc'; ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT); ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 2; ctx.beginPath(); for(let i = 0; i < GAME_WIDTH; i += 40) { ctx.moveTo(i, 0); ctx.lineTo(i, GAME_HEIGHT); } for(let j = -40; j < GAME_HEIGHT; j += 40) { ctx.moveTo(0, j - bgOffsetY); ctx.lineTo(GAME_WIDTH, j - bgOffsetY); } ctx.stroke(); }
 function drawPlatforms() { const timeOffset = Date.now() / 150; platforms.forEach(p => { drawPremiumPlatform(ctx, p.x, p.y, p.width, p.height, p.type, timeOffset); if (p.type === TYPE.SPIKE) drawSpikes(ctx, p.x, p.y, p.width); if (p.items && p.items.length > 0) { let heartRendered = 0; p.items.forEach((item) => { if (item === 'heart') { const spacing = 35; const totalHearts = p.items.filter(i => i==='heart').length; const startX = (p.x + p.width/2) - ((totalHearts-1) * spacing / 2); drawPixelHeart(ctx, startX + (heartRendered * spacing), p.y - 20, 1.2, true); heartRendered++; } else if (item === 'speedup') { drawSpeedArrows(ctx, p.x + p.width/2, p.y + p.height/2, TYPE.SPEED_UP); } else if (item === 'speeddown') { drawSpeedArrows(ctx, p.x + p.width/2, p.y + p.height/2, TYPE.SPEED_DOWN); } }); } }); drawPremiumPlatform(ctx, 0, 0, GAME_WIDTH, 15, TYPE.NORMAL, 0); }
 
-// 🌟 升級：HUD 血條大頭貼動態裁切
+// 🌟 智能進化：HUD 自動從全身圖裁切大頭貼，並套用加大與補正
 function drawHUD() {
     if (gameState === STATE.START) return;
     const panelGrad = ctx.createLinearGradient(15, 15, 15, 95); panelGrad.addColorStop(0, '#f8fafc'); panelGrad.addColorStop(0.5, '#e2e8f0'); panelGrad.addColorStop(1, '#cbd5e1'); ctx.fillStyle = panelGrad; ctx.shadowColor = 'rgba(0,0,0,0.15)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 4; ctx.beginPath(); ctx.roundRect(15, 15, 300, 80, 8); ctx.fill(); ctx.shadowColor = 'transparent'; ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 2; ctx.stroke();
@@ -283,6 +277,7 @@ function drawHUD() {
     const drawHUDAssets = (player, baseX, baseY) => {
         if(player.isDead) return;
         for (let i = 0; i < 4; i++) { drawPixelHeart(ctx, baseX + 15 + (i * 26), baseY + 15, 1.0, player.life >= (i+1)*2); }
+        
         ctx.save(); ctx.translate(baseX + 25, baseY + 50); 
         const img = assets[player.spriteKey];
         if(img) {
@@ -290,9 +285,14 @@ function drawHUD() {
             const is9x6 = (img.width / img.height) > 1.2;
             let fw = is9x6 ? img.width / 9 : img.width / 4;
             let fh = is9x6 ? img.height / 6 : img.height / 4;
-            ctx.drawImage(img, 0, 0, fw, fh, -20, -24, 40, 40); 
+            
+            // 如果是女角色(4x4)，HUD頭像也稍微放大一點
+            let drawSize = is9x6 ? 40 : 48; 
+            let offset = is9x6 ? -20 : -24;
+            ctx.drawImage(img, 0, 0, fw, fh, offset, offset, drawSize, drawSize); 
         }
         ctx.restore();
+        
         ctx.fillStyle = '#2f3542'; ctx.font = 'bold 18px Arial'; ctx.textAlign = 'left'; ctx.fillText(player.id, baseX + 45, baseY + 55); ctx.fillStyle = '#e67e22'; ctx.font = 'bold 14px Arial'; ctx.fillText(`👼 x${player.revivesLeft}`, baseX + 80, baseY + 53);
     };
     
@@ -300,36 +300,54 @@ function drawHUD() {
     ctx.fillStyle = '#2f3542'; ctx.font = 'bold 36px "Orbitron", monospace'; ctx.textAlign = 'left'; ctx.fillText(`第 ${String(floorCount).padStart(4, '0')} 層`, 330, 55); ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(330, 70); ctx.lineTo(580, 70); ctx.stroke(); ctx.fillStyle = '#e1b12c'; ctx.font = 'bold 16px Arial'; ctx.fillText(`SPEED: ${currentPlatformSpeed.toFixed(1)}`, 330, 90);
 }
 
-// 🌟 全新重寫：4大陣容炫酷角色挑選大面板
 function drawUI() {
     if (gameState === STATE.START) {
-        ctx.fillStyle = 'rgba(248, 250, 252, 0.95)'; ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT); ctx.fillStyle = '#2d3436'; ctx.textAlign = 'center'; ctx.font = 'bold 46px Arial'; ctx.fillText('瘋狂下樓梯', GAME_WIDTH / 2, 110); ctx.fillStyle = '#64748b'; ctx.font = 'bold 16px Arial'; ctx.fillText('請點擊按鈕切換並選擇特工編組', GAME_WIDTH / 2, 155);
+        ctx.fillStyle = 'rgba(248, 250, 252, 0.95)'; ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT); 
+        ctx.fillStyle = '#2d3436'; ctx.textAlign = 'center'; ctx.font = 'bold 50px Arial'; ctx.fillText('瘋狂下樓梯', GAME_WIDTH / 2, 90); 
 
-        const drawBtn = (id, label, x, y, mode, isP2, spriteKey) => {
-            const sel = selectedSetup === mode; ctx.fillStyle = sel ? (isP2 ? '#f39c12' : '#0984e3') : '#ffffff'; ctx.strokeStyle = sel ? '#2d3436' : '#cbd5e1'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.roundRect(x, y, 250, 68, 10); ctx.fill(); ctx.stroke(); ctx.fillStyle = sel ? '#ffffff' : '#2d3436'; ctx.font = 'bold 15px Arial'; ctx.textAlign = 'left'; ctx.fillText(`按鍵 ${id} : ${label}`, x + 15, y + 28);
-            ctx.save(); ctx.translate(x + 195, y + 32); 
+        ctx.fillStyle = '#64748b'; ctx.font = 'bold 16px Arial'; ctx.fillText('步驟 1：選擇遊玩模式', GAME_WIDTH / 2, 140);
+        const drawTab = (label, x, y, isSelected) => {
+            ctx.fillStyle = isSelected ? '#2980b9' : '#e2e8f0'; ctx.strokeStyle = isSelected ? '#1a5276' : '#cbd5e1'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.roundRect(x, y, 200, 45, 8); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = isSelected ? '#ffffff' : '#64748b'; ctx.font = 'bold 18px Arial'; ctx.textAlign = 'center'; ctx.fillText(label, x + 100, y + 28);
+        };
+        drawTab('1P 單人特訓', 80, 160, !isTwoPlayer);
+        drawTab('2P 雙人干擾', 320, 160, isTwoPlayer);
+
+        ctx.fillStyle = '#64748b'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center'; ctx.fillText('步驟 2：選擇特工陣容', GAME_WIDTH / 2, 250);
+
+        const drawBtn = (id, label, x, y, isSelected, spriteKey) => {
+            ctx.fillStyle = isSelected ? (isTwoPlayer ? '#f39c12' : '#0984e3') : '#ffffff'; 
+            ctx.strokeStyle = isSelected ? '#2d3436' : '#cbd5e1'; ctx.lineWidth = 2.5; 
+            ctx.beginPath(); ctx.roundRect(x, y, 250, 75, 10); ctx.fill(); ctx.stroke(); 
+            ctx.fillStyle = isSelected ? '#ffffff' : '#2d3436'; ctx.font = 'bold 15px Arial'; ctx.textAlign = 'left'; 
+            ctx.fillText(`組合 ${id} : ${label}`, x + 15, y + 30);
+            
+            ctx.save(); ctx.translate(x + 195, y + 35); 
             const img = assets[spriteKey];
             if(img) {
                 ctx.imageSmoothingEnabled = false;
                 const is9x6 = (img.width / img.height) > 1.2;
                 let fw = is9x6 ? img.width / 9 : img.width / 4; let fh = is9x6 ? img.height / 6 : img.height / 4;
-                ctx.drawImage(img, 0, 0, fw, fh, -20, -20, 40, 40); 
+                let drawSize = is9x6 ? 40 : 48; let offset = is9x6 ? -20 : -24;
+                ctx.drawImage(img, 0, 0, fw, fh, offset, offset, drawSize, drawSize); 
             } ctx.restore();
         };
 
-        ctx.fillStyle = '#2f3542'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'left'; ctx.fillText('【 1P 單人特殊訓練 】', 40, 200);
-        drawBtn(1, '紅髮女僕貓娘 ♀', 40, 215, MODES.P1_FEMALE1, false, 'sprite_female1'); 
-        drawBtn(2, '藍髮西裝特工 ♂', 40, 295, MODES.P1_MALE1, false, 'sprite_male1');
-        drawBtn(3, '金髮女特工 ♀', 40, 375, MODES.P1_FEMALE2, false, 'sprite_female2'); 
-        drawBtn(4, '神秘男特工 ♂', 40, 455, MODES.P1_MALE2, false, 'sprite_male2');
-        
-        ctx.fillStyle = '#2f3542'; ctx.fillText('【 2P 雙人干擾模式 】', 310, 200);
-        drawBtn(5, '女僕1 ＆ 西裝1', 310, 215, MODES.P2_F1_M1, true, 'sprite_female1'); 
-        drawBtn(6, '金髮2 ＆ 神秘2', 310, 295, MODES.P2_F2_M2, true, 'sprite_female2');
-        drawBtn(7, '雙女子戰隊 (1&2)', 310, 375, MODES.P2_F1_F2, true, 'sprite_female1'); 
-        drawBtn(8, '雙男子硬漢 (1&2)', 310, 455, MODES.P2_M1_M2, true, 'sprite_male1');
+        if (!isTwoPlayer) {
+            drawBtn(1, '貓影特工 ♀', 40, 280, sel1P === 1, 'sprite_female1'); 
+            drawBtn(2, '灰髮特工 ♂', 310, 280, sel1P === 2, 'sprite_male1');
+            drawBtn(3, '緋紅特工 ♀', 40, 380, sel1P === 3, 'sprite_female2'); 
+            drawBtn(4, '藍髮特工 ♂', 310, 380, sel1P === 4, 'sprite_male2');
+        } else {
+            drawBtn(5, '貓影 ＆ 灰髮', 40, 280, sel2P === 5, 'sprite_female1'); 
+            drawBtn(6, '緋紅 ＆ 藍髮', 310, 280, sel2P === 6, 'sprite_female2');
+            drawBtn(7, '雙女子戰隊', 40, 380, sel2P === 7, 'sprite_female1'); 
+            drawBtn(8, '雙男子硬漢', 310, 380, sel2P === 8, 'sprite_male1');
+        }
 
-        ctx.fillStyle = '#ff7675'; ctx.font = 'bold 22px Arial'; ctx.textAlign = 'center'; if (Math.floor(Date.now() / 500) % 2 === 0) ctx.fillText('PRESS ENTER TO START', GAME_WIDTH / 2, GAME_HEIGHT - 60);
+        ctx.fillStyle = '#ff7675'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center'; 
+        if (Math.floor(Date.now() / 500) % 2 === 0) ctx.fillText('PRESS ENTER TO START', GAME_WIDTH / 2, GAME_HEIGHT - 80);
     }
     if (gameState === STATE.PAUSED) { ctx.fillStyle = 'rgba(255, 255, 255, 0.6)'; ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT); ctx.fillStyle = 'rgba(255, 255, 255, 0.9)'; ctx.shadowColor = 'rgba(0,0,0,0.2)'; ctx.shadowBlur = 10; ctx.beginPath(); ctx.roundRect(GAME_WIDTH/2 - 160, GAME_HEIGHT/2 - 60, 320, 120, 12); ctx.fill(); ctx.shadowColor = 'transparent'; ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 2; ctx.stroke(); ctx.fillStyle = '#2d3436'; ctx.textAlign = 'center'; ctx.font = 'bold 32px Arial'; ctx.fillText('GAME PAUSED', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 10); ctx.font = 'bold 16px Arial'; ctx.fillText('PRESS SPACE', GAME_WIDTH / 2, GAME_HEIGHT / 2 + 40); }
     if (gameState === STATE.GAMEOVER) { ctx.fillStyle = 'rgba(248, 250, 252, 0.9)'; ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT); ctx.fillStyle = '#d63031'; ctx.textAlign = 'center'; ctx.font = 'bold 56px Arial'; ctx.fillText('GAME OVER', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 20); }
@@ -341,10 +359,6 @@ window.addEventListener('keydown', (e) => {
     keys[e.code] = true;
     if (e.code === 'Space') { if (gameState === STATE.PLAYING) gameState = STATE.PAUSED; else if (gameState === STATE.PAUSED) gameState = STATE.PLAYING; }
     if (gameState === STATE.START) {
-        if (e.code === 'Digit1') selectedSetup = MODES.P1_FEMALE1; if (e.code === 'Digit2') selectedSetup = MODES.P1_MALE1;
-        if (e.code === 'Digit3') selectedSetup = MODES.P1_FEMALE2; if (e.code === 'Digit4') selectedSetup = MODES.P1_MALE2;
-        if (e.code === 'Digit5') selectedSetup = MODES.P2_F1_M1; if (e.code === 'Digit6') selectedSetup = MODES.P2_F2_M2;
-        if (e.code === 'Digit7') selectedSetup = MODES.P2_F1_F2; if (e.code === 'Digit8') selectedSetup = MODES.P2_M1_M2;
         if (e.code === 'Enter') startGame();
     } else if (gameState === STATE.LEADERBOARD && e.code === 'Enter') gameState = STATE.START;
 }, { passive: false });
@@ -353,13 +367,37 @@ window.addEventListener('keyup', (e) => keys[e.code] = false);
 canvas.addEventListener('mousedown', (e) => {
     if (gameState !== STATE.START) return;
     const rect = canvas.getBoundingClientRect(); const mx = (e.clientX - rect.left) * (canvas.width / rect.width); const my = (e.clientY - rect.top) * (canvas.height / rect.height);
-    if (mx > 40 && mx < 290) { if (my > 215 && my < 283) selectedSetup = MODES.P1_FEMALE1; if (my > 295 && my < 363) selectedSetup = MODES.P1_MALE1; if (my > 375 && my < 443) selectedSetup = MODES.P1_FEMALE2; if (my > 455 && my < 523) selectedSetup = MODES.P1_MALE2; }
-    if (mx > 310 && mx < 560) { if (my > 215 && my < 283) selectedSetup = MODES.P2_F1_M1; if (my > 295 && my < 363) selectedSetup = MODES.P2_F2_M2; if (my > 375 && my < 443) selectedSetup = MODES.P2_F1_F2; if (my > 455 && my < 523) selectedSetup = MODES.P2_M1_M2; }
+    
+    if (my > 160 && my < 205) {
+        if (mx > 80 && mx < 280) isTwoPlayer = false;
+        if (mx > 320 && mx < 520) isTwoPlayer = true;
+    }
+    if (my > 280 && my < 355) { 
+        if (mx > 40 && mx < 290) { if(!isTwoPlayer) sel1P = 1; else sel2P = 5; }
+        if (mx > 310 && mx < 560) { if(!isTwoPlayer) sel1P = 2; else sel2P = 6; }
+    }
+    if (my > 380 && my < 455) {
+        if (mx > 40 && mx < 290) { if(!isTwoPlayer) sel1P = 3; else sel2P = 7; }
+        if (mx > 310 && mx < 560) { if(!isTwoPlayer) sel1P = 4; else sel2P = 8; }
+    }
 });
 
 function startGame() {
     floorCount = 1; currentPlatformSpeed = CONFIG.START_SPEED; 
-    if (selectedSetup <= 4) gameMode = 1; else gameMode = 2;
+    gameMode = isTwoPlayer ? 2 : 1;
+    
+    if (gameMode === 1) {
+        if (sel1P === 1) p1CharType = 'sprite_female1';
+        else if (sel1P === 2) p1CharType = 'sprite_male1';
+        else if (sel1P === 3) p1CharType = 'sprite_female2';
+        else if (sel1P === 4) p1CharType = 'sprite_male2';
+    } else {
+        if (sel2P === 5) { p1CharType = 'sprite_female1'; p2CharType = 'sprite_male1'; }
+        else if (sel2P === 6) { p1CharType = 'sprite_female2'; p2CharType = 'sprite_male2'; }
+        else if (sel2P === 7) { p1CharType = 'sprite_female1'; p2CharType = 'sprite_female2'; }
+        else if (sel2P === 8) { p1CharType = 'sprite_male1'; p2CharType = 'sprite_male2'; }
+    }
+    
     initPlatforms(); p1.reset(true); p2.reset(true); gameState = STATE.PLAYING;
 }
 
