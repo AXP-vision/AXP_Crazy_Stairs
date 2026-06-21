@@ -1,4 +1,4 @@
-// app.js - AXP Clinical Vision Therapy Deluxe: State Reset Fixed
+// app.js - AXP Clinical Deluxe: Global Supabase Leaderboard Integration
 
 // ==========================================
 // 🛡️ AXP 商業防護與設定
@@ -9,6 +9,15 @@ if (!allowedDomains.includes(window.location.hostname) && window.location.hostna
     document.body.innerHTML = `<h2 style="color:#e74c3c; text-align:center; margin-top:20vh; font-family:Arial;">⚠️ 未經授權的使用</h2>`;
     throw new Error("Security Check Failed."); 
 }
+
+// ==========================================
+// ☁️ Supabase 雲端資料庫初始化 (請填入你的金鑰)
+// ==========================================
+const SUPABASE_URL = 'https://wvholwcyrldixlsgoege.supabase.co'; // 例如：'https://xxxx.supabase.co'
+const SUPABASE_ANON_KEY = 'sb_publishable_BozJ84tPQF-jBHGKtXKqgw_ELodM54e'; // 一大串英數字
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let globalLeaderboardData = []; // 暫存雲端抓下來的排行榜
 
 let canvas, ctx, container;
 const GAME_WIDTH = 600;
@@ -51,10 +60,10 @@ const initGameAssets = () => {
     return new Promise((resolve) => {
         let loaded = 0;
         const imagesToLoad = {
-            sprite_female1: 'sprite_female1.png', // 貓影 ♀
-            sprite_male1: 'sprite_male1.png',     // 灰髮 ♂
-            sprite_female2: 'sprite_female2.png', // 緋紅 ♀
-            sprite_male2: 'sprite_male2.png'      // 藍髮 ♂
+            sprite_female1: 'sprite_female1.png', 
+            sprite_male1: 'sprite_male1.png',     
+            sprite_female2: 'sprite_female2.png', 
+            sprite_male2: 'sprite_male2.png'      
         };
         const total = Object.keys(imagesToLoad).length;
         if (total === 0) resolve();
@@ -78,7 +87,6 @@ let isTwoPlayer = false;
 let p1Confirmed = false;
 let p2Confirmed = false;
 
-// 🌟 OKN 視覺訓練控制變數
 let isOknMoving = false;    
 let oknDirection = 1;       
 let oknSpeedLevel = 1;      
@@ -91,25 +99,8 @@ let p1CharType = 'sprite_female1';
 let p2CharType = 'sprite_male1';
 const charKeysMap = ['sprite_female1', 'sprite_male1', 'sprite_female2', 'sprite_male2'];
 
-function getLeaderboard() {
-    try { return JSON.parse(localStorage.getItem('AXP_Leaderboard')) || []; } 
-    catch (e) { return []; }
-}
-
-function saveToLeaderboard(name, floors) {
-    let lb = getLeaderboard();
-    const now = new Date();
-    const dateStr = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getDate().toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
-    lb.push({ name, floors, date: dateStr });
-    lb.sort((a, b) => b.floors - a.floors);
-    lb = lb.slice(0, 10); 
-    try { localStorage.setItem('AXP_Leaderboard', JSON.stringify(lb)); } 
-    catch (e) { console.warn("無法儲存排行榜資料"); }
-}
-
 const CONFIG = { START_SPEED: 1.5, MAX_SPEED: 8.0, SPEED_STEP: 0.05, GAP_DISTANCE: 165 };
 let currentPlatformSpeed = CONFIG.START_SPEED;
-
 const GRAVITY = 0.4; const MAX_FALL_SPEED = 9.0; const MAX_MOVE_SPEED = 7.0; const MOVE_ACCEL = 0.5; const FRICTION = 0.85;
 
 let floorCount = 1; let platforms = []; let keys = {}; let gameMode = 1; let bgOffsetY = 0;
@@ -127,8 +118,7 @@ function drawPixelHeart(ctx, x, y, size, isFull) {
 
 function drawFriendlyCharacter(ctx, x, y, spriteKey, facingRight, animFrame, isDead, damageCooldown) {
     if (isDead || (damageCooldown > 0 && Math.floor(Date.now() / 50) % 2 === 0)) return;
-    const img = assets[spriteKey]; 
-    if (!img) return; 
+    const img = assets[spriteKey]; if (!img) return; 
 
     ctx.save(); ctx.translate(x, y); 
     ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.beginPath(); ctx.ellipse(0, 20, 14, 4, 0, 0, Math.PI*2); ctx.fill();
@@ -138,25 +128,17 @@ function drawFriendlyCharacter(ctx, x, y, spriteKey, facingRight, animFrame, isD
 
     if (!is9x6Format) {
         fw = img.width / 4; fh = img.height / 4; numFrames = 4;
-        const fIdx = Math.floor(animFrame / 15) % numFrames;
-        sx = fIdx * fw; sy = 2 * fh; 
-        yVisualOffset = 14; 
-        scaleMultiplier = 1.35; 
-        if (!facingRight) scaleX = -1;
+        const fIdx = Math.floor(animFrame / 15) % numFrames; sx = fIdx * fw; sy = 2 * fh; 
+        yVisualOffset = 14; scaleMultiplier = 1.35; if (!facingRight) scaleX = -1;
     } else {
         fw = img.width / 9; fh = img.height / 6; numFrames = 3;
-        const fIdx = Math.floor(animFrame / 15) % numFrames;
-        sx = fIdx * fw; sy = 0 * fh; 
-        yVisualOffset = 16;  
-        scaleMultiplier = 1.0;
-        scaleX = facingRight ? -1 : 1; 
+        const fIdx = Math.floor(animFrame / 15) % numFrames; sx = fIdx * fw; sy = 0 * fh; 
+        yVisualOffset = 16; scaleMultiplier = 1.0; scaleX = facingRight ? -1 : 1; 
     }
 
     ctx.scale(scaleX, 1);
-    const targetHeight = 48 * scaleMultiplier; 
-    const targetWidth = targetHeight * (fw / fh); 
-    const dx = -targetWidth / 2;
-    const dy = -targetHeight / 2 + yVisualOffset; 
+    const targetHeight = 48 * scaleMultiplier; const targetWidth = targetHeight * (fw / fh); 
+    const dx = -targetWidth / 2; const dy = -targetHeight / 2 + yVisualOffset; 
     
     ctx.imageSmoothingEnabled = false; 
     ctx.drawImage(img, sx, sy, fw, fh, dx, dy, targetWidth, targetHeight);
@@ -164,47 +146,30 @@ function drawFriendlyCharacter(ctx, x, y, spriteKey, facingRight, animFrame, isD
 }
 
 function drawPremiumPlatform(ctx, x, y, w, h, type, timeOffset) {
-    ctx.save(); 
-    ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.beginPath(); ctx.roundRect(x, y + 4, w, h, 6); ctx.fill();
+    ctx.save(); ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.beginPath(); ctx.roundRect(x, y + 4, w, h, 6); ctx.fill();
     ctx.beginPath(); 
-    if (type === TYPE.BELT_LEFT || type === TYPE.BELT_RIGHT) { 
-        ctx.arc(x + h/2, y + h/2, h/2, Math.PI/2, Math.PI*1.5); ctx.lineTo(x + w - h/2, y); ctx.arc(x + w - h/2, y + h/2, h/2, Math.PI*1.5, Math.PI/2); 
-    } else { 
-        ctx.roundRect(x, y, w, h, 6); 
-    } 
-    ctx.closePath(); 
+    if (type === TYPE.BELT_LEFT || type === TYPE.BELT_RIGHT) { ctx.arc(x + h/2, y + h/2, h/2, Math.PI/2, Math.PI*1.5); ctx.lineTo(x + w - h/2, y); ctx.arc(x + w - h/2, y + h/2, h/2, Math.PI*1.5, Math.PI/2); } 
+    else { ctx.roundRect(x, y, w, h, 6); } ctx.closePath(); 
     
-    const grad = ctx.createLinearGradient(x, y, x, y + h); 
-    grad.addColorStop(0, '#f1f5f9'); grad.addColorStop(0.3, '#e2e8f0'); grad.addColorStop(1, '#64748b'); 
+    const grad = ctx.createLinearGradient(x, y, x, y + h); grad.addColorStop(0, '#f1f5f9'); grad.addColorStop(0.3, '#e2e8f0'); grad.addColorStop(1, '#64748b'); 
     ctx.fillStyle = grad; ctx.fill(); ctx.strokeStyle = '#475569'; ctx.lineWidth = 1.5; ctx.stroke(); 
     
     ctx.save(); ctx.clip(); ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2; 
-    if (type === TYPE.BELT_LEFT || type === TYPE.BELT_RIGHT) { 
-        ctx.beginPath(); ctx.arc(x + h/2, y + h/2, h/2 - 1, Math.PI/2, Math.PI*1.5); ctx.lineTo(x + w - h/2, y + 1); ctx.arc(x + w - h/2, y + h/2, h/2 - 1, Math.PI*1.5, Math.PI/2); ctx.closePath(); ctx.stroke(); 
-    } else { 
-        ctx.strokeRect(x + 1, y + 1, w - 2, h - 2); 
-    } 
-    ctx.restore();
+    if (type === TYPE.BELT_LEFT || type === TYPE.BELT_RIGHT) { ctx.beginPath(); ctx.arc(x + h/2, y + h/2, h/2 - 1, Math.PI/2, Math.PI*1.5); ctx.lineTo(x + w - h/2, y + 1); ctx.arc(x + w - h/2, y + h/2, h/2 - 1, Math.PI*1.5, Math.PI/2); ctx.closePath(); ctx.stroke(); } 
+    else { ctx.strokeRect(x + 1, y + 1, w - 2, h - 2); } ctx.restore();
 
     if (type === TYPE.BELT_LEFT || type === TYPE.BELT_RIGHT) {
-        ctx.save(); ctx.clip(); 
-        ctx.fillStyle = type === TYPE.BELT_LEFT ? 'rgba(52, 152, 219, 0.2)' : 'rgba(155, 89, 182, 0.2)'; 
-        ctx.fillRect(x, y, w, h); 
-        const dir = type === TYPE.BELT_LEFT ? 'left' : 'right';
+        ctx.save(); ctx.clip(); ctx.fillStyle = type === TYPE.BELT_LEFT ? 'rgba(52, 152, 219, 0.2)' : 'rgba(155, 89, 182, 0.2)'; ctx.fillRect(x, y, w, h); const dir = type === TYPE.BELT_LEFT ? 'left' : 'right';
         for (let i = -20; i < w + 40; i += 45) {
-            const shift = type === TYPE.BELT_LEFT ? (i - timeOffset * 12) % (w + 40) : (i + timeOffset * 12) % (w + 40); 
-            const drawX = shift < -20 ? w + 40 + shift : shift;
+            const shift = type === TYPE.BELT_LEFT ? (i - timeOffset * 12) % (w + 40) : (i + timeOffset * 12) % (w + 40); const drawX = shift < -20 ? w + 40 + shift : shift;
             ctx.save(); ctx.translate(x + drawX, y + h/2); if (dir === 'left') ctx.scale(-1, 1);
             ctx.fillStyle = dir === 'left' ? '#2980b9' : '#8e44ad'; ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(2, 6); ctx.lineTo(2, -6); ctx.closePath(); ctx.fill();
             ctx.fillRect(-2, -3, 2, 6); ctx.fillRect(-6, -3, 2, 6); ctx.restore();
-        } 
-        ctx.restore();
+        } ctx.restore();
     }
-
     const rx1 = x + (type===TYPE.BELT_LEFT||type===TYPE.BELT_RIGHT ? h/2 : 12); const rx2 = x + w - (type===TYPE.BELT_LEFT||type===TYPE.BELT_RIGHT ? h/2 : 12);
     ctx.fillStyle = '#334155'; ctx.beginPath(); ctx.arc(rx1, y+h/2, 2.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(rx2, y+h/2, 2.5, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(rx1 - 0.5, y+h/2 - 0.5, 1, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(rx2 - 0.5, y+h/2 - 0.5, 1, 0, Math.PI*2); ctx.fill(); 
-    ctx.restore();
+    ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(rx1 - 0.5, y+h/2 - 0.5, 1, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(rx2 - 0.5, y+h/2 - 0.5, 1, 0, Math.PI*2); ctx.fill(); ctx.restore();
 }
 
 function drawSpikes(ctx, x, y, w) {
@@ -218,13 +183,7 @@ function drawSpikes(ctx, x, y, w) {
 
 function drawSpeedArrows(ctx, x, y, type) {
     ctx.save(); ctx.strokeStyle = type === TYPE.SPEED_UP ? '#e74c3c' : '#0984e3'; ctx.lineWidth = 4; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-    for (let i = -15; i <= 15; i += 15) { 
-        ctx.beginPath(); 
-        if (type === TYPE.SPEED_UP) { ctx.moveTo(x + i - 6, y + 4); ctx.lineTo(x + i, y - 6); ctx.lineTo(x + i + 6, y + 4); } 
-        else { ctx.moveTo(x + i - 6, y - 6); ctx.lineTo(x + i, y + 4); ctx.lineTo(x + i + 6, y - 6); } 
-        ctx.stroke(); 
-    } 
-    ctx.restore();
+    for (let i = -15; i <= 15; i += 15) { ctx.beginPath(); if (type === TYPE.SPEED_UP) { ctx.moveTo(x + i - 6, y + 4); ctx.lineTo(x + i, y - 6); ctx.lineTo(x + i + 6, y + 4); } else { ctx.moveTo(x + i - 6, y - 6); ctx.lineTo(x + i, y + 4); ctx.lineTo(x + i + 6, y - 6); } ctx.stroke(); } ctx.restore();
 }
 
 function drawBackground() {
@@ -233,13 +192,9 @@ function drawBackground() {
         if (currentOknOffset >= 80) currentOknOffset -= 80;
         if (currentOknOffset <= -80) currentOknOffset += 80;
     }
-
-    ctx.fillStyle = '#ffffff'; 
-    ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
     ctx.fillStyle = '#cbd5e1'; 
-    for (let i = -80; i < GAME_WIDTH + 80; i += 80) {
-        ctx.fillRect(i + currentOknOffset, 0, 40, GAME_HEIGHT); 
-    }
+    for (let i = -80; i < GAME_WIDTH + 80; i += 80) { ctx.fillRect(i + currentOknOffset, 0, 40, GAME_HEIGHT); }
 }
 
 // ==========================================
@@ -307,13 +262,43 @@ function createPlatform(y, isFirst = false) {
 
 function initPlatforms() { platforms = []; createPlatform(300, true); let currentY = 300; for (let i = 1; i < 7; i++) { currentY += CONFIG.GAP_DISTANCE; createPlatform(currentY); } }
 
-function checkGameOver() {
+// 🌟 雲端非同步獲取排行榜資料
+async function fetchLeaderboardData() {
+    try {
+        const { data, error } = await supabaseClient
+            .from('leaderboard')
+            .select('*')
+            .order('floors', { ascending: false })
+            .limit(10);
+        if (data) globalLeaderboardData = data;
+    } catch (err) {
+        console.error("無法取得雲端排行榜:", err);
+    }
+}
+
+// 🌟 非同步遊戲結束邏輯 (上傳與下載成績)
+async function checkGameOver() {
     if (gameState !== STATE.PLAYING) return;
     if ((gameMode === 1 && p1.isDead) || (gameMode === 2 && p1.isDead && p2.isDead)) {
         gameState = STATE.GAMEOVER;
-        setTimeout(() => {
-            const lb = getLeaderboard();
-            if (lb.length < 10 || floorCount > lb[lb.length-1].floors) { const name = prompt("🎉 破紀錄啦！請輸入你的大名：", "特工"); if (name) saveToLeaderboard(name, floorCount); }
+        
+        // 使用 setTimeout 讓玩家看到 GAMEOVER 畫面 0.8 秒後再觸發排行榜
+        setTimeout(async () => {
+            // 先獲取一次當前排行榜來比對是否破紀錄
+            await fetchLeaderboardData();
+            let lowestScore = globalLeaderboardData.length === 10 ? globalLeaderboardData[9].floors : 0;
+            
+            if (globalLeaderboardData.length < 10 || floorCount > lowestScore) { 
+                const name = prompt("🎉 破紀錄啦！請輸入你的大名：", "特工"); 
+                if (name) {
+                    const now = new Date();
+                    const dateStr = `${now.getFullYear()}/${(now.getMonth()+1).toString().padStart(2,'0')}/${now.getDate().toString().padStart(2,'0')} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+                    // 寫入雲端資料庫
+                    await supabaseClient.from('leaderboard').insert([{ name: name, floors: floorCount, date: dateStr }]);
+                    // 重新獲取最新排行榜
+                    await fetchLeaderboardData();
+                }
+            }
             gameState = STATE.LEADERBOARD;
         }, 800);
     }
@@ -325,11 +310,8 @@ function update() {
     platforms.forEach(p => p.y -= currentPlatformSpeed);
     
     if (platforms.length > 0 && platforms[0].y < -50) { 
-        platforms.shift(); 
-        floorCount++; 
-        if (currentPlatformSpeed < CONFIG.MAX_SPEED) { 
-            currentPlatformSpeed = Math.min(CONFIG.MAX_SPEED, currentPlatformSpeed + CONFIG.SPEED_STEP); 
-        } 
+        platforms.shift(); floorCount++; 
+        if (currentPlatformSpeed < CONFIG.MAX_SPEED) { currentPlatformSpeed = Math.min(CONFIG.MAX_SPEED, currentPlatformSpeed + CONFIG.SPEED_STEP); } 
     }
     
     let lastPlatform = platforms[platforms.length - 1]; if (lastPlatform.y < GAME_HEIGHT) createPlatform(lastPlatform.y + CONFIG.GAP_DISTANCE);
@@ -346,9 +328,7 @@ function update() {
                     if (p.items && p.items.length > 0) {
                         let newItems = [];
                         p.items.forEach(item => {
-                            if (item === 'heart') { 
-                                if (player.life < player.maxLife) { player.life = Math.min(player.maxLife, player.life + 2); } else { newItems.push(item); } 
-                            } 
+                            if (item === 'heart') { if (player.life < player.maxLife) { player.life = Math.min(player.maxLife, player.life + 2); } else { newItems.push(item); } } 
                             else if (item === 'speedup') { currentPlatformSpeed = Math.min(CONFIG.MAX_SPEED, currentPlatformSpeed + 0.5); } 
                             else if (item === 'speeddown') { currentPlatformSpeed = Math.max(1.0, currentPlatformSpeed - 1.5); }
                         }); p.items = newItems; if(p.items.length === 0) p.type = TYPE.NORMAL; 
@@ -381,7 +361,7 @@ function drawPlatforms() {
 }
 
 // ==========================================
-// 🌟 介面系統與 OKN 按鈕
+// 🌟 介面與繪圖
 // ==========================================
 function drawHUD() {
     if (gameState === STATE.START) return;
@@ -491,16 +471,12 @@ function drawOknButton() {
     ctx.strokeStyle = '#2d3436'; 
     ctx.lineWidth = 2; ctx.beginPath();
     ctx.roundRect(485, 745, 95, 38, 8); ctx.fill(); ctx.stroke();
-    
     ctx.fillStyle = '#ffffff'; ctx.font = 'bold 13px Arial'; ctx.textAlign = 'center';
     ctx.fillText(isOknMoving ? 'OKN: ON' : 'OKN: OFF', 532, 768);
 
     ctx.fillStyle = 'rgba(52, 152, 219, 0.75)'; 
-    ctx.beginPath();
-    ctx.roundRect(380, 745, 95, 38, 8); ctx.fill(); ctx.stroke();
-    
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(oknDirection === 1 ? '➡ 向右' : '⬅ 向左', 427, 768);
+    ctx.beginPath(); ctx.roundRect(380, 745, 95, 38, 8); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#ffffff'; ctx.fillText(oknDirection === 1 ? '➡ 向右' : '⬅ 向左', 427, 768);
 
     if (gameState === STATE.START) {
         ctx.fillStyle = oknSpeedLevel > 1 ? '#e74c3c' : '#95a5a6';
@@ -514,7 +490,6 @@ function drawOknButton() {
         ctx.beginPath(); ctx.roundRect(330, 745, 40, 38, 8); ctx.fill(); ctx.stroke();
         ctx.fillStyle = '#ffffff'; ctx.fillText('+', 350, 768);
     }
-    
     ctx.restore();
 }
 
@@ -524,18 +499,17 @@ function drawGameState() {
     }
     if (gameState === STATE.GAMEOVER) {
         ctx.fillStyle = 'rgba(248, 250, 252, 0.75)'; ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT); 
-        ctx.fillStyle = '#d63031'; 
-        ctx.textAlign = 'center'; ctx.font = 'bold 56px Arial'; ctx.fillText('GAME OVER', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 20);
+        ctx.fillStyle = '#d63031'; ctx.textAlign = 'center'; ctx.font = 'bold 56px Arial'; ctx.fillText('GAME OVER', GAME_WIDTH / 2, GAME_HEIGHT / 2 - 20);
     }
     if (gameState === STATE.LEADERBOARD) {
         ctx.fillStyle = 'rgba(15, 23, 42, 0.75)'; ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT); 
         
-        ctx.fillStyle = '#38bdf8'; 
-        ctx.textAlign = 'center'; ctx.font = 'bold 40px Arial'; ctx.fillText('🏆 TOP 10 排行榜', GAME_WIDTH / 2, 80);
+        ctx.fillStyle = '#38bdf8'; ctx.textAlign = 'center'; ctx.font = 'bold 40px Arial'; ctx.fillText('🏆 TOP 10 排行榜', GAME_WIDTH / 2, 80);
         
-        const lb = getLeaderboard(); ctx.fillStyle = '#94a3b8'; ctx.font = 'bold 18px Arial'; ctx.textAlign = 'left'; ctx.fillText('排名', 60, 140); ctx.fillText('代號', 130, 140); ctx.fillText('樓層', 320, 140); ctx.fillText('時間', 420, 140); ctx.strokeStyle = '#334155'; ctx.beginPath(); ctx.moveTo(50, 150); ctx.lineTo(550, 150); ctx.stroke(); ctx.font = '18px Arial';
+        ctx.fillStyle = '#94a3b8'; ctx.font = 'bold 18px Arial'; ctx.textAlign = 'left'; ctx.fillText('排名', 60, 140); ctx.fillText('代號', 130, 140); ctx.fillText('樓層', 320, 140); ctx.fillText('時間', 420, 140); ctx.strokeStyle = '#334155'; ctx.beginPath(); ctx.moveTo(50, 150); ctx.lineTo(550, 150); ctx.stroke(); ctx.font = '18px Arial';
         
-        lb.forEach((entry, i) => { 
+        // 🌟 使用從雲端讀取的 globalLeaderboardData
+        globalLeaderboardData.forEach((entry, i) => { 
             const y = 190 + i * 40; 
             ctx.fillStyle = i < 3 ? '#fbbf24' : '#cbd5e1'; 
             ctx.fillText(`# ${i+1}`, 60, y); 
@@ -557,7 +531,6 @@ window.addEventListener('keydown', (e) => {
     keys[e.code] = true;
     if (e.code === 'Space') { if (gameState === STATE.PLAYING) gameState = STATE.PAUSED; else if (gameState === STATE.PAUSED) gameState = STATE.PLAYING; }
     
-    // 🌟 核心：確保每次按下 Enter 都正確重置狀態，且重新開始遊戲時樓層不累積
     if (gameState === STATE.START && e.code === 'Enter') {
         if (!isTwoPlayer) { startGame(); } else { if (!p1Confirmed) { p1Confirmed = true; } else if (!p2Confirmed) { p2Confirmed = true; startGame(); } }
     } else if (gameState === STATE.LEADERBOARD && e.code === 'Enter') { 
@@ -614,15 +587,10 @@ function bindMouseEvents() {
 }
 
 function startGame() {
-    // 🌟 修正：確保每次開始遊戲時，樓層和背景捲動絕對歸零！
-    floorCount = 1; 
-    currentPlatformSpeed = CONFIG.START_SPEED; 
-    bgOffsetY = 0; 
+    floorCount = 1; currentPlatformSpeed = CONFIG.START_SPEED; bgOffsetY = 0; 
     gameMode = isTwoPlayer ? 2 : 1;
-    
     if (gameMode === 1) { p1CharType = charKeysMap[selP1-1]; } 
     else { p1CharType = charKeysMap[selP1-1]; p2CharType = charKeysMap[selP2-1]; }
-    
     initPlatforms(); p1.reset(true); p2.reset(true); gameState = STATE.PLAYING;
 }
 
@@ -644,7 +612,10 @@ function bootGame() {
     bindMouseEvents();      
     initGameAssets().then(() => { 
         initPlatforms(); 
-        gameLoop();         
+        // 在遊戲載入時先抓一次雲端排行榜，確保待會顯示有資料
+        fetchLeaderboardData().then(() => {
+            gameLoop();         
+        });
     });
 }
 
